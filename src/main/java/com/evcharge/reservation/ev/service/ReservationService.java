@@ -20,6 +20,7 @@ import com.evcharge.reservation.ev.domain.User;
 import com.evcharge.reservation.ev.dto.ReservationCreateRequest;
 import com.evcharge.reservation.ev.dto.ReservationExpiryAlert;
 import com.evcharge.reservation.ev.dto.ReservationResponse;
+import com.evcharge.reservation.ev.lock.LockMetrics;
 import com.evcharge.reservation.ev.lock.LockStrategyResolver;
 import com.evcharge.reservation.ev.repository.ChargerRepository;
 import com.evcharge.reservation.ev.repository.ReservationRepository;
@@ -38,6 +39,7 @@ public class ReservationService {
 	private final UserRepository userRepository;
 	private final ChargerRepository chargerRepository;
 	private final LockStrategyResolver lockStrategyResolver;
+	private final LockMetrics lockMetrics;
 
 	@Transactional
 	public ReservationResponse create(ReservationCreateRequest request) {
@@ -78,43 +80,47 @@ public class ReservationService {
 		User user = userRepository.findById(userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "유저를 찾을 수 없습니다."));
 
-		return lockStrategyResolver.resolve().executeWithLock(chargerId, () -> {
-			// 락 획득 후 반드시 DB에서 다시 읽는다 (FOR UPDATE). 후보조회 L1 캐시를 쓰지 않는다.
-			Charger charger = chargerRepository.findByIdForUpdate(chargerId)
-					.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "충전기를 찾을 수 없습니다."));
+		return lockMetrics.recordReserveHold(() ->
+				lockStrategyResolver.resolve().executeWithLock(chargerId, () -> {
+					// 락 획득 후 반드시 DB에서 다시 읽는다 (FOR UPDATE). 후보조회 L1 캐시를 쓰지 않는다.
+					long rowWaitStart = System.nanoTime();
+					Charger charger = chargerRepository.findByIdForUpdate(chargerId)
+							.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "충전기를 찾을 수 없습니다."));
+					lockMetrics.recordLockWait("db_for_update", true, System.nanoTime() - rowWaitStart);
 
-			if (reservationRepository.existsByUserIdAndChargerIdAndStatus(
-					userId, chargerId, ReservationStatus.PENDING)) {
-				throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
-			}
+					if (reservationRepository.existsByUserIdAndChargerIdAndStatus(
+							userId, chargerId, ReservationStatus.PENDING)) {
+						throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
+					}
 
-			if (reservationRepository.existsByCharger_IdAndStatus(chargerId, ReservationStatus.PENDING)) {
-				throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
-			}
+					if (reservationRepository.existsByCharger_IdAndStatus(chargerId, ReservationStatus.PENDING)) {
+						throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
+					}
 
-			if (charger.getStatus() != ChargerStatus.AVAILABLE) {
-				throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
-			}
+					if (charger.getStatus() != ChargerStatus.AVAILABLE) {
+						throw new ResponseStatusException(HttpStatus.CONFLICT, "이미 예약되었습니다");
+					}
 
-			LocalDateTime now = LocalDateTime.now();
-			ReservationType resolvedType = type == null ? ReservationType.MANUAL : type;
-			LocalDateTime holdExpiresAt = ReservationHoldPolicy.holdExpiresAt(now, resolvedType);
+					LocalDateTime now = LocalDateTime.now();
+					ReservationType resolvedType = type == null ? ReservationType.MANUAL : type;
+					LocalDateTime holdExpiresAt = ReservationHoldPolicy.holdExpiresAt(now, resolvedType);
 
-			Reservation reservation = Reservation.builder()
-					.user(user)
-					.charger(charger)
-					.startTime(now)
-					.endTime(holdExpiresAt)
-					.holdExpiresAt(holdExpiresAt)
-					.status(ReservationStatus.PENDING)
-					.type(resolvedType)
-					.expiryNotified(false)
-					.build();
+					Reservation reservation = Reservation.builder()
+							.user(user)
+							.charger(charger)
+							.startTime(now)
+							.endTime(holdExpiresAt)
+							.holdExpiresAt(holdExpiresAt)
+							.status(ReservationStatus.PENDING)
+							.type(resolvedType)
+							.expiryNotified(false)
+							.build();
 
-			charger.markStatus(ChargerStatus.RESERVED);
-			chargerRepository.save(charger);
-			return ReservationResponse.from(reservationRepository.save(reservation));
-		});
+					charger.markStatus(ChargerStatus.RESERVED);
+					chargerRepository.save(charger);
+					return ReservationResponse.from(reservationRepository.save(reservation));
+				})
+		);
 	}
 
 	public ReservationResponse findById(Long id) {

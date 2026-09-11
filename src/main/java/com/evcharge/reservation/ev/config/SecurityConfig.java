@@ -56,6 +56,14 @@ public class SecurityConfig {
 								"/static/**"
 						).permitAll()
 						.requestMatchers("/api/stations/**").permitAll()
+						// 로컬 부하 테스트에서 락 전략 토글 (인증 없이 전환)
+						.requestMatchers("/api/admin/lock-strategy").permitAll()
+						// 로컬 Prometheus scrape용 (배포 환경에서는 방화벽/게이트웨이로 제한)
+						.requestMatchers(
+								"/actuator/health",
+								"/actuator/prometheus",
+								"/actuator/info"
+						).permitAll()
 						.anyRequest().authenticated()
 				)
 				.sessionManagement(session -> session

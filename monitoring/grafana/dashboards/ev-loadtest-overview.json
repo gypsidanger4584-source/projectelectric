@@ -1,0 +1,196 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "1) k6 HTTP RPS (처리량)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(k6_http_reqs_total[30s]))",
+          "legendFormat": "http_reqs/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+    },
+    {
+      "title": "2) k6 VUs (동시 유저)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "k6_vus", "legendFormat": "vus", "refId": "A" },
+        { "expr": "k6_vus_max", "legendFormat": "vus_max", "refId": "B" }
+      ]
+    },
+    {
+      "title": "3) HikariCP connections (풀 점유 수)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{job=\"spring-ev\",instance=\"8080\"}",
+          "legendFormat": "active",
+          "refId": "A"
+        },
+        {
+          "expr": "hikaricp_connections_pending{job=\"spring-ev\",instance=\"8080\"}",
+          "legendFormat": "pending",
+          "refId": "B"
+        },
+        {
+          "expr": "hikaricp_connections_max{job=\"spring-ev\",instance=\"8080\"}",
+          "legendFormat": "max",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "4) DB 커넥션 점유시간 p95 (Hikari usage + reserve hold)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(hikaricp_connections_usage_seconds_bucket{job=\"spring-ev\",instance=\"8080\"}[1m])) by (le))",
+          "legendFormat": "hikari usage p95",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ev_reserve_hold_seconds_bucket[1m])) by (le, strategy))",
+          "legendFormat": "reserve hold p95 {{strategy}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "title": "5) 락 경합 후 재시도 성공률",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(ev_auto_reserve_outcome_total{result=\"retry_success\"}[1m])) by (strategy) / clamp_min(sum(rate(ev_auto_reserve_outcome_total{result=~\"retry_success|exhausted_conflict\"}[1m])) by (strategy), 1e-9)",
+          "legendFormat": "retry success rate {{strategy}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(ev_auto_reserve_outcome_total{result=\"first_success\"}[1m])) by (strategy)",
+          "legendFormat": "first_success/s {{strategy}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(ev_auto_reserve_outcome_total{result=\"retry_success\"}[1m])) by (strategy)",
+          "legendFormat": "retry_success/s {{strategy}}",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(ev_auto_reserve_outcome_total{result=\"exhausted_conflict\"}[1m])) by (strategy)",
+          "legendFormat": "exhausted/s {{strategy}}",
+          "refId": "D"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": "retry success rate.*" },
+            "properties": [{ "id": "unit", "value": "percentunit" }]
+          }
+        ]
+      }
+    },
+    {
+      "title": "6) 락 대기시간 분포 p50/p95 (Redisson tryLock / DB FOR UPDATE)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(ev_lock_wait_seconds_bucket[1m])) by (le, strategy, kind))",
+          "legendFormat": "p50 {{strategy}} {{kind}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(ev_lock_wait_seconds_bucket[1m])) by (le, strategy, kind))",
+          "legendFormat": "p95 {{strategy}} {{kind}}",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+    },
+    {
+      "title": "k6 ok / conflict / fail",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(k6_auto_reserve_ok_total[30s]))",
+          "legendFormat": "ok/s",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(k6_auto_reserve_conflict_total[30s]))",
+          "legendFormat": "conflict/s",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(k6_auto_reserve_fail_total[30s]))",
+          "legendFormat": "fail/s",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "title": "Postgres / Redis",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "pg_stat_activity_count{datname=\"ev_charge\"}",
+          "legendFormat": "pg {{state}}",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(redis_commands_processed_total[30s])",
+          "legendFormat": "redis cmd/s",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "JVM CPU",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "process_cpu_usage{job=\"spring-ev\",instance=\"8080\"}",
+          "legendFormat": "process",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] }
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["ev", "k6", "loadtest", "50slots"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "EV Loadtest Overview",
+  "uid": "ev-loadtest-overview",
+  "version": 2
+}

@@ -197,6 +197,105 @@
 50 동시 Kakao 다중목적지 호출 + 커넥션 경합으로 ok가 11~26 수준에 머물고 duration ~30s대(타임아웃)가 관측됨.  
 **락/폴백 로직 측정을 위해** 최종 50×50 런에서는 Kakao만 스킵했다.
 
+### 6.4 Grafana 비교 런 — REDISSON vs PESSIMISTIC (2026-09-11)
+
+동일 조건에서 락 전략만 바꿔 **수치·그래프 증거**를 남긴 런이다.
+
+| 항목 | 값 |
+|------|-----|
+| 일시 | 2026-09-11 |
+| VU / AVAILABLE | **50 / 50** |
+| 반경 | `MAX_KM=1` |
+| 앱 | 단일 `8080` |
+| 모니터링 | Prometheus + Grafana (`EV Loadtest Overview`) |
+| 스크립트 | `loadtest/run-with-grafana.ps1` → `auto-reserve-50slots.js` |
+| 절차 문서 | `loadtest/COMPARE-50SLOTS.md` |
+
+#### k6 결과
+
+| 지표 | REDISSON | PESSIMISTIC |
+|------|---------:|------------:|
+| ok | **50** | **50** |
+| conflict | 0 | 0 |
+| fail | 0 | 0 |
+| duration avg | **5331 ms** | **2282 ms** |
+| duration p95 | **6848 ms** | **3234 ms** |
+| 첫 성공 (start 기준) | 4.172 s | 1.663 s |
+| **마지막 성공까지** | **8.776 s** | **4.197 s** |
+| 첫~마지막 간격 | 4.604 s | 2.534 s |
+
+#### DB 불변조건 (PESSIMISTIC 런 직후)
+
+| 지표 | 값 |
+|------|-----|
+| PENDING | **50** |
+| DISTINCT charger | **50** |
+| max PENDING / charger | **1** |
+
+#### Grafana에서 캡처할 패널
+
+대시보드: http://localhost:3000/d/ev-loadtest-overview/ev-loadtest-overview  
+스크린샷 저장 위치: `loadtest/screenshots/`
+
+| # | 패널 | 의미 |
+|---|------|------|
+| 1 | k6 HTTP RPS | 처리량 (TPS 감) |
+| 2 | k6 VUs | 동시 유저 50 |
+| 3 | HikariCP connections | 풀 active / pending / max |
+| 4 | DB 커넥션 점유시간 p95 | Hikari usage + `ev_reserve_hold` |
+| 5 | 락 경합 후 재시도 성공률 | `retry_success / (retry_success + exhausted)` |
+| 6 | 락 대기시간 p50/p95 | Redisson tryLock / DB `FOR UPDATE` |
+
+#### Grafana 스크린샷 (2026-09-11 비교 런)
+
+**1~3) RPS · VU · Hikari**
+
+![RPS VU Hikari](screenshots/01-rps-vu-hikari.png)
+
+- VU **50** 스파이크 확인
+- Hikari **active ≈ 50~51**, **pending = 0**, max **70** → 풀 고갈 없음
+- RPS는 short spike 특성상 낮은 구간값(~1.5)으로 보이며, **총량 비교는 위 k6 표(ok/duration)가 기준**
+
+**4~5) 커넥션 점유시간 · 재시도 성공률**
+
+![Hold Retry](screenshots/02-hold-retry.png)
+
+- REDISSON `reserve hold` p95 ≈ **40 ms** 구간 관측
+- REDISSON 내부 폴백 경로에서 **retry success rate ≈ 100%** (경합 후 다음 후보 성공)
+- PESSIMISTIC은 본 런에서 클라이언트 최종 409가 없어 재시도율 곡선이 거의 안 보임(대부분 1차 성공 성격)
+
+**6) 락 대기시간 · k6 ok**
+
+![Lock Wait OK](screenshots/03-lock-wait-ok.png)
+
+| 구분 | 대략값 (그래프) |
+|------|-----------------|
+| REDISSON tryLock p95 | **~22 ms** |
+| REDISSON tryLock p50 | **~9 ms** |
+| REDISSON 경로의 `FOR UPDATE` p95 | **~3 ms** |
+| PESSIMISTIC `FOR UPDATE` | **~1~2 ms** (낮음) |
+| k6 ok/s (순간) | ~1.5 |
+
+→ 단일 인스턴스에서 **락 대기 자체는 Redisson tryLock이 DB FOR UPDATE보다 큼**.
+
+**Postgres / Redis · JVM CPU**
+
+![Postgres Redis CPU](screenshots/04-postgres-redis-cpu.png)
+
+- REDISSON 런 시각에 **redis cmd/s ≈ 1000** 스파이크
+- JVM process CPU 피크 ≈ **45%** (이어서 PESSIMISTIC 구간에서 더 낮은 피크)
+- Postgres는 idle 위주, active 폭주 없음 (풀·락 정리 후 안정)
+
+부가 캡처(REDISSON 진행 중): `01b`~`04b` 동일 폴더.
+
+#### 해석
+
+- 자리 수 = 유저 수(50)인 **여유 있는 경합**에서는 두 전략 모두 **ok 50 · 이중 예약 0**.
+- 동일 조건에서 **완료 지연은 PESSIMISTIC이 더 짧음** (마지막 성공 4.2s vs 8.8s).
+- Redisson은 분산 락(tryLock wait + Redis 왕복) 비용이 단일 인스턴스·단일 DB 경합에서는 오버헤드로 나타날 수 있다.
+- **멀티 인스턴스(8080+8081)** 에서는 Redisson의 장점(인스턴스 간 락)이 드러나므로, 단일 인스턴스 지연만으로 “항상 Redisson이 느리다”고 단정하지 않는다.
+- 핫스팟(AVAILABLE ≪ VU) 시나리오의 409 폴백·성공률 차이는 §5·§6.2를 참고.
+
 ---
 
 ## 7. 한눈에 보는 전체 변화
@@ -227,15 +326,25 @@
 **위치: PC PowerShell · `ev` 폴더**
 
 ```powershell
-# 1) DB 준비 (Docker)
+# 0) 모니터링 스택
+docker compose up -d
+# Grafana: http://localhost:3000  (admin/admin)
+# Prometheus: http://localhost:9090
+
+# 1) DB 준비 (Docker · 파일 복사 권장 — 한글 SQL 인코딩)
 docker cp loadtest/prepare-50-slots.sql ev-charge-db:/tmp/p50.sql
 docker exec ev-charge-db psql -U ev_admin -d ev_charge -f /tmp/p50.sql
 
 # 2) 앱 (예시: 8080)
 .\gradlew.bat bootRun --args="--server.port=8080"
 
-# 3) k6
-k6 run -e STRATEGY=REDISSON -e BASE_URLS=http://localhost:8080 -e MAX_KM=1 loadtest/auto-reserve-50slots.js
+# 3) k6 + Grafana remote write (전략별)
+.\loadtest\run-with-grafana.ps1 -Strategy REDISSON -Script auto-reserve-50slots.js -MaxKm 1
+# 리셋 후
+docker cp loadtest/reset-loadtest-reservations.sql ev-charge-db:/tmp/reset.sql
+docker exec ev-charge-db psql -U ev_admin -d ev_charge -f /tmp/reset.sql
+docker exec ev-charge-db psql -U ev_admin -d ev_charge -f /tmp/p50.sql
+.\loadtest\run-with-grafana.ps1 -Strategy PESSIMISTIC -Script auto-reserve-50slots.js -MaxKm 1
 
 # 4) DB 불변조건
 docker exec ev-charge-db psql -U ev_admin -d ev_charge -c "
@@ -251,11 +360,7 @@ FROM (
 ) t;"
 ```
 
-**모니터링 (PC PowerShell · 아무 곳)**
-
-```powershell
-docker stats ev-charge-db ev-redis
-```
+상세 체크리스트: `loadtest/COMPARE-50SLOTS.md`
 
 ---
 
@@ -263,9 +368,10 @@ docker stats ev-charge-db ev-redis
 
 1. **HTTP ok 50 ≠ 정합성 확보.** 수정 전 max PENDING/charger = **20**.
 2. `REQUIRES_NEW` + `FOR UPDATE` fresh read + 커밋 후 Redis unlock + partial unique로 **max PENDING/charger = 1** 달성.
-3. 409 폴백으로 핫스팟에서 성공이 **1 → 6**(제한된 AVAILABLE)으로 증가, 50×50에서는 **49 성공**.
-4. 50자리 경합에서 **마지막 성공까지 약 5.7초**(첫 성공 2.7초, 간격 2.9초).
+3. 409 폴백으로 핫스팟에서 성공이 **1 → 6**(제한된 AVAILABLE)으로 증가, 50×50에서는 **49 성공**(초기 런) / Grafana 비교 런에서는 **양쪽 50 성공**.
+4. 50자리 경합에서 **마지막 성공까지** — 초기 REDISSON 약 **5.7초**, Grafana 비교 런에서는 REDISSON **8.8초** / PESSIMISTIC **4.2초**.
 5. 자동예약 오케스트레이션은 **긴 TX를 열지 않는 것**이 커넥션 풀·락 대기 안정성에 중요했다.
+6. **단일 인스턴스 50×50**에서는 PESSIMISTIC이 지연면에서 유리했고, Redisson 가치는 **멀티 인스턴스 분산 락** 시나리오에서 별도 증명하는 것이 맞다.
 
 ---
 
@@ -274,9 +380,13 @@ docker stats ev-charge-db ev-redis
 | 경로 | 설명 |
 |------|------|
 | `src/main/java/.../service/ReservationService.java` | REQUIRES_NEW, FOR UPDATE 예약 |
-| `src/main/java/.../service/AutoReservationService.java` | NOT_SUPPORTED, 409 폴백, skip-kakao |
-| `src/main/java/.../lock/RedissonLockStrategy.java` | afterCompletion unlock |
-| `src/main/resources/application.yml` | redis, hikari, `loadtest.skip-kakao` |
+| `src/main/java/.../service/AutoReservationService.java` | NOT_SUPPORTED, 409 폴백, skip-kakao, 재시도 메트릭 |
+| `src/main/java/.../lock/RedissonLockStrategy.java` | afterCompletion unlock, 락 대기 메트릭 |
+| `src/main/java/.../lock/LockMetrics.java` | Prometheus용 락/재시도/점유 메트릭 |
+| `src/main/resources/application.yml` | redis, hikari, actuator, `loadtest.skip-kakao` |
 | `loadtest/auto-reserve.js` | 일반 A/B 부하 |
 | `loadtest/auto-reserve-50slots.js` | 50자리 마지막 성공 시각 측정 |
-| `docker-compose.yml` | postgres `max_connections=200` |
+| `loadtest/run-with-grafana.ps1` | k6 → Prometheus remote write |
+| `loadtest/COMPARE-50SLOTS.md` | Grafana 비교 실행 절차 |
+| `monitoring/` | Prometheus / Grafana 설정·대시보드 |
+| `docker-compose.yml` | postgres, redis, prometheus, grafana, exporters |

@@ -56,6 +56,21 @@ logging:
   file:
     name: logs/app.log
 
+# Prometheus scrape: /actuator/prometheus (로컬 모니터링용 — 배포 시 네트워크 제한 권장)
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+    prometheus:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 # 부하 테스트 시 Kakao 동시 호출 병목 회피 (락/폴백 로직은 동일, 순위만 직선거리)
 loadtest:
   skip-kakao: true

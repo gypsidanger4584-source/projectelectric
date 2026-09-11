@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  # Spring Boot (호스트에서 bootRun) — Windows/Mac Docker Desktop
+  - job_name: spring-ev
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          app: ev
+          instance: "8080"
+      - targets: ["host.docker.internal:8081"]
+        labels:
+          app: ev
+          instance: "8081"
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

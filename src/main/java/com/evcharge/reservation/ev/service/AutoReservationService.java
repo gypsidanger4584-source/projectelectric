@@ -27,6 +27,7 @@ import com.evcharge.reservation.ev.dto.ReservationResponse;
 import com.evcharge.reservation.ev.external.KakaoMobilityService;
 import com.evcharge.reservation.ev.external.KakaoMobilityService.DestinationPoint;
 import com.evcharge.reservation.ev.external.KakaoMobilityService.DistanceResult;
+import com.evcharge.reservation.ev.lock.LockMetrics;
 import com.evcharge.reservation.ev.repository.ChargerRepository;
 import com.evcharge.reservation.ev.repository.ChargingStationRepository;
 import com.evcharge.reservation.ev.repository.UserRepository;
@@ -50,6 +51,7 @@ public class AutoReservationService {
 	private final KakaoMobilityService kakaoMobilityService;
 	private final ReservationService reservationService;
 	private final UserSettingService userSettingService;
+	private final LockMetrics lockMetrics;
 
 	@org.springframework.beans.factory.annotation.Value("${loadtest.skip-kakao:false}")
 	private boolean skipKakao;
@@ -163,28 +165,36 @@ public class AutoReservationService {
 		}
 
 		ResponseStatusException lastConflict = null;
+		boolean hadConflict = false;
 		for (Charger candidate : reachable) {
 			try {
-				return reservationService.reserveCharger(
+				ReservationResponse reserved = reservationService.reserveCharger(
 						candidate.getId(),
 						userId,
 						ReservationType.AUTO,
 						lat,
 						lng
 				);
+				lockMetrics.recordAutoOutcome(hadConflict ? "retry_success" : "first_success");
+				return reserved;
 			} catch (ResponseStatusException ex) {
 				// 이미 선점된 충전기면 다음 후보로 폴백
 				if (ex.getStatusCode() == HttpStatus.CONFLICT) {
+					hadConflict = true;
+					lockMetrics.recordAutoConflictAttempt();
 					lastConflict = ex;
 					continue;
 				}
+				lockMetrics.recordAutoOutcome("error");
 				throw ex;
 			}
 		}
 
 		if (lastConflict != null) {
+			lockMetrics.recordAutoOutcome("exhausted_conflict");
 			throw lastConflict;
 		}
+		lockMetrics.recordAutoOutcome("not_found");
 		throw new ResponseStatusException(HttpStatus.NOT_FOUND, "경로 기준 반경 내 예약 가능한 충전기가 없습니다.");
 	}
 
