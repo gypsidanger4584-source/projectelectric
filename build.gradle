@@ -25,6 +25,7 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-security'
 	implementation 'org.redisson:redisson-spring-boot-starter:4.4.0'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	// 로컬 bootRun 시 프로젝트 루트 .env → Spring Environment 자동 로드 (프로덕션 classpath 제외)
 	developmentOnly 'me.paulschwarz:springboot4-dotenv:5.1.0'
 
 	compileOnly 'org.projectlombok:lombok'

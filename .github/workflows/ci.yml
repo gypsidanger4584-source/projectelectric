@@ -10,6 +10,31 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: ev_charge
+          POSTGRES_USER: ev_admin
+          POSTGRES_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ev_admin -d ev_charge"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: 코드 체크아웃
         uses: actions/checkout@v4
@@ -24,6 +49,11 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Gradle 빌드 및 테스트
+        env:
+          KAKAO_MAPS_API_KEY: ${{ secrets.KAKAO_MAPS_API_KEY }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: ./gradlew build
 
       - name: 테스트 결과 업로드 (실패 시 확인용)

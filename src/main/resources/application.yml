@@ -15,7 +15,7 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/ev_charge
     username: ev_admin
-    password: changeme
+    password: "${DB_PASSWORD:changeme}"
     hikari:
       maximum-pool-size: 70
       connection-timeout: 30000
@@ -35,10 +35,11 @@ spring:
     init:
       mode: always
 
+# 시크릿은 코드에 넣지 말고 .env / CI Secrets / 배포 환경변수로만 주입
 kakao:
   maps:
     api:
-      key: "36ec790e3cc1c310c7555848ff0af810"
+      key: "${KAKAO_MAPS_API_KEY:}"
   local:
     rest-key: "${KAKAO_REST_API_KEY:}"
   mobility:
