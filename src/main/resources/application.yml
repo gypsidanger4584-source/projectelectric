@@ -1,0 +1,60 @@
+server:
+  servlet:
+    session:
+      cookie:
+        # JS에서 document.cookie로 세션 탈취 방지
+        http-only: true
+        # CSRF 완화 (탑레벨 GET 네비게이션만 쿠키 전송)
+        same-site: lax
+        # HTTPS 배포 시 true로 (로컬 http://localhost 는 false 유지)
+        secure: ${SESSION_COOKIE_SECURE:false}
+
+spring:
+  application:
+    name: ev
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ev_charge
+    username: ev_admin
+    password: changeme
+    hikari:
+      maximum-pool-size: 70
+      connection-timeout: 30000
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  jpa:
+    hibernate:
+      ddl-auto: update
+    defer-datasource-initialization: true
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+  sql:
+    init:
+      mode: always
+
+kakao:
+  maps:
+    api:
+      key: "36ec790e3cc1c310c7555848ff0af810"
+  local:
+    rest-key: "${KAKAO_REST_API_KEY:}"
+  mobility:
+    rest-key: "${KAKAO_REST_API_KEY:}"
+    base-url: https://apis-navi.kakaomobility.com
+
+external-api:
+  charging-station:
+    base-url: http://apis.data.go.kr/B552584/EvCharger/getChargerInfo
+    service-key: "${PUBLIC_DATA_API_KEY:}"
+    num-of-rows: 1000
+
+logging:
+  file:
+    name: logs/app.log
+
+# 부하 테스트 시 Kakao 동시 호출 병목 회피 (락/폴백 로직은 동일, 순위만 직선거리)
+loadtest:
+  skip-kakao: true

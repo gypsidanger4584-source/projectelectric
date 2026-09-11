@@ -1,0 +1,34 @@
+# Build and Output
+.gradle/
+build/
+bin/
+out/
+target/
+
+# IDE and Editor
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Docker and Databases
+.docker/
+docker-compose.override.yml
+*.db
+*.sqlite
+data/
+pgdata/
+
+# Logs and Run-time
+*.log
+logs/
+.aws/
+.env*
+
+*.class
+.classpath
+.project
+.settings/
+dump.rdb
+.DS_Store

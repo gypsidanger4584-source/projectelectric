@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ev-charge-db
+    environment:
+      POSTGRES_DB: ev_charge
+      POSTGRES_USER: ev_admin
+      POSTGRES_PASSWORD: changeme
+    command: ["postgres", "-c", "max_connections=200"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - ev_pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    container_name: ev-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  ev_pgdata:

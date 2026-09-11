@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EvCharge - Station Map</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    .tech-font { font-family: 'Orbitron', sans-serif; }
+    html, body { height: 100%; margin: 0; }
+    #station-map { width: 100%; height: 100%; }
+    .filter-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      white-space: nowrap;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.875rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #374151;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      transition: background 0.15s;
+    }
+    .filter-btn:hover { background: #f9fafb; }
+    .filter-btn.is-active { border-color: #2563eb; color: #1d4ed8; background: #eff6ff; }
+    .map-ctrl {
+      width: 2.25rem;
+      height: 2.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .map-ctrl:hover { background: #f9fafb; }
+    .filter-dropdown {
+      position: absolute;
+      top: calc(100% + 0.35rem);
+      left: 0;
+      min-width: 9rem;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      padding: 0.25rem;
+      z-index: 40;
+      display: none;
+    }
+    .filter-dropdown.open { display: block; }
+    .filter-dropdown button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.45rem 0.65rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+    }
+    .filter-dropdown button:hover,
+    .filter-dropdown button.is-selected { background: #f3f4f6; }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      white-space: nowrap;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #374151;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      cursor: pointer;
+      user-select: none;
+    }
+    .filter-chip input { accent-color: #2563eb; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 5.5rem;
+      transform: translateX(-50%);
+      background: #111827;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.7rem 1rem;
+      border-radius: 999px;
+      z-index: 60;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .toast.show { opacity: 1; }
+    .map-loading {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.45);
+      backdrop-filter: blur(1px);
+    }
+    .map-loading.show { display: flex; }
+    .map-loading span {
+      background: #111827;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.65rem 1rem;
+      border-radius: 999px;
+    }
+
+    /* Station detail side panel */
+    #station-panel {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      width: min(430px, calc(100% - 1.5rem));
+      z-index: 35;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(17, 24, 39, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      transform: translateX(110%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 0.28s ease, opacity 0.28s ease;
+    }
+    #station-panel.active {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .sp-header {
+      background: linear-gradient(135deg, #00A876 0%, #00966a 100%);
+      color: #fff;
+      padding: 1.1rem 1.1rem 1.15rem;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .sp-header h2 {
+      margin: 0 5rem 0.35rem 0;
+      font-size: 1.15rem;
+      font-weight: 800;
+      line-height: 1.3;
+      letter-spacing: -0.01em;
+    }
+    .sp-header p {
+      margin: 0 5rem 0 0;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.88);
+      line-height: 1.4;
+      font-weight: 500;
+    }
+    .sp-close {
+      position: absolute;
+      top: 0.7rem;
+      right: 0.7rem;
+      width: 2rem;
+      height: 2rem;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      font-size: 1.15rem;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .sp-close:hover { background: rgba(255,255,255,0.28); }
+    .sp-favorite-toggle {
+      position: absolute;
+      top: 0.7rem;
+      right: 2.9rem;
+      width: 2rem;
+      height: 2rem;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+    .sp-favorite-toggle:hover { background: rgba(255,255,255,0.28); }
+    .sp-favorite-toggle.is-active {
+      color: #fde047;
+      background: rgba(0,0,0,0.18);
+    }
+    .sp-reserve-btn {
+      flex-shrink: 0;
+      border: 0;
+      border-radius: 999px;
+      background: #00A876;
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sp-reserve-btn:hover { background: #00966a; }
+    .sp-cancel-btn {
+      flex-shrink: 0;
+      border: 0;
+      border-radius: 999px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .sp-cancel-btn:hover { background: #fecaca; }
+    .sp-badge.mine {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+    .sp-charger-row .right {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-shrink: 0;
+    }
+    .reserve-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 70;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .reserve-modal-overlay.open {
+      display: flex;
+    }
+    .reserve-modal {
+      width: 100%;
+      max-width: 320px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+      color: #111827;
+    }
+    .reserve-modal h3 {
+      margin: 0 0 0.4rem;
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: #111827;
+    }
+    .reserve-modal #rm-charger-sub {
+      margin: 0 0 0.85rem;
+      font-size: 0.82rem;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+    .reserve-modal .rm-note {
+      margin: 0 0 1.1rem;
+      padding: 0.7rem 0.8rem;
+      border-radius: 0.5rem;
+      background: #f3f4f6;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: #374151;
+    }
+    .reserve-modal .rm-note strong {
+      color: #00A876;
+      font-weight: 800;
+    }
+    .reserve-modal .rm-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
+    .reserve-modal .rm-actions button {
+      border: 0;
+      border-radius: 999px;
+      padding: 0.5rem 0.95rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    #rm-cancel {
+      background: #f3f4f6;
+      color: #374151;
+    }
+    #rm-cancel:hover { background: #e5e7eb; }
+    #rm-confirm {
+      background: #00A876;
+      color: #fff;
+    }
+    #rm-confirm:hover { background: #00966a; }
+    #rm-confirm:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+    .filter-dropdown-wrap {
+      position: relative;
+    }
+    .favorites-dropdown {
+      position: absolute;
+      top: calc(100% + 0.35rem);
+      right: 0;
+      min-width: 14rem;
+      max-width: 18rem;
+      max-height: 16rem;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+      padding: 0.25rem;
+      z-index: 45;
+      display: none;
+    }
+    .favorites-dropdown.open { display: block; }
+    .favorites-dropdown button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 0.55rem 0.7rem;
+      border-radius: 0.375rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #374151;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .favorites-dropdown button:hover { background: #f3f4f6; }
+    .favorites-dropdown .empty {
+      padding: 0.7rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #9ca3af;
+      text-align: center;
+    }
+    .sp-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.9rem 1rem 1.25rem;
+      scrollbar-width: thin;
+    }
+    .sp-section { margin-bottom: 1.05rem; }
+    .sp-section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.55rem;
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #111827;
+    }
+    .sp-section-title .meta {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #6b7280;
+    }
+    .sp-stat-grid {
+      display: flex;
+      gap: 0.45rem;
+      align-items: stretch;
+    }
+    .sp-stat-card {
+      flex: 1 1 0;
+      min-width: 0;
+      border-radius: 10px;
+      padding: 0.7rem 0.45rem;
+      text-align: center;
+    }
+    .sp-stat-card.other {
+      flex: 0 0 auto;
+      margin-left: auto;
+      min-width: 4.2rem;
+    }
+    .sp-stat-card .num {
+      font-size: 1.35rem;
+      font-weight: 800;
+      line-height: 1.1;
+    }
+    .sp-stat-card .lbl {
+      margin-top: 0.2rem;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+    .sp-stat-card .hint {
+      margin-top: 0.15rem;
+      font-size: 0.62rem;
+      font-weight: 600;
+      opacity: 0.85;
+    }
+    .sp-stat-card.available { background: #ecfdf5; color: #059669; }
+    .sp-stat-card.inuse { background: #eff6ff; color: #2563eb; }
+    .sp-stat-card.waiting { background: #fff7ed; color: #c2410c; }
+    .sp-stat-card.other { background: #f3f4f6; color: #6b7280; }
+
+    .sp-fee-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.35rem;
+    }
+    .sp-fee-card {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 0.55rem 0.2rem;
+      text-align: center;
+      background: #fafafa;
+    }
+    .sp-fee-card.active {
+      border-color: #00A876;
+      background: #ecfdf5;
+      box-shadow: 0 0 0 1px rgba(0,168,118,0.2);
+    }
+    .sp-fee-card .band {
+      font-size: 0.65rem;
+      font-weight: 800;
+      color: #374151;
+    }
+    .sp-fee-card .price {
+      margin-top: 0.25rem;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: #111827;
+    }
+    .sp-fee-card .unit {
+      font-size: 0.58rem;
+      font-weight: 600;
+      color: #9ca3af;
+    }
+
+    .sp-warn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.65rem;
+    }
+    .sp-warn p {
+      margin: 0;
+      font-size: 0.7rem;
+      font-weight: 600;
+      color: #92400e;
+      line-height: 1.35;
+    }
+    .sp-warn button {
+      flex-shrink: 0;
+      border: 0;
+      border-radius: 999px;
+      background: #00A876;
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .sp-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.55rem;
+    }
+    .sp-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.62rem;
+      font-weight: 700;
+    }
+    .sp-badge.available { background: #d1fae5; color: #047857; }
+    .sp-badge.charging { background: #dbeafe; color: #1d4ed8; }
+    .sp-badge.reserved { background: #fef3c7; color: #b45309; }
+    .sp-badge.broken { background: #e5e7eb; color: #4b5563; }
+    .sp-badge.band { background: #f3f4f6; color: #374151; }
+    .sp-badge.band.is-primary { background: #d1fae5; color: #047857; }
+
+    .sp-charger-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+    .sp-charger-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: 0.5rem 0.65rem;
+      background: #fafafa;
+    }
+    .sp-charger-row.is-mine {
+      border: 1.5px solid #00A876;
+      background: #ecfdf5;
+      box-shadow: 0 0 0 1px rgba(0, 168, 118, 0.12);
+    }
+    .sp-charger-row .left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+      min-width: 0;
+    }
+    .sp-charger-row .id {
+      font-size: 0.78rem;
+      font-weight: 800;
+      color: #111827;
+    }
+    .sp-charger-row .sub {
+      font-size: 0.65rem;
+      font-weight: 600;
+      color: #6b7280;
+    }
+
+    .sp-kv {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+    .sp-kv-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.78rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid #f3f4f6;
+    }
+    .sp-kv-row .k { color: #6b7280; font-weight: 600; flex-shrink: 0; }
+    .sp-kv-row .v { color: #111827; font-weight: 700; text-align: right; word-break: break-all; }
+
+    .sp-note {
+      margin: 0;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: #4b5563;
+      line-height: 1.45;
+      background: #f9fafb;
+      border-radius: 10px;
+      padding: 0.7rem 0.8rem;
+    }
+    .sp-info-dot {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1rem;
+      height: 1rem;
+      border-radius: 999px;
+      background: #e5e7eb;
+      color: #6b7280;
+      font-size: 0.65rem;
+      font-weight: 800;
+      margin-left: 0.25rem;
+    }
+    .map-legend {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .map-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: #4b5563;
+      white-space: nowrap;
+    }
+    .map-legend-pin {
+      width: 10px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .map-round-btn {
+      width: 2.25rem;
+      height: 2.25rem;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.15s;
+      flex-shrink: 0;
+    }
+    .map-round-btn:hover { background: #f9fafb; }
+    .map-round-btn.is-open {
+      background: #111827;
+      border-color: #111827;
+      color: #fff;
+    }
+    .map-round-btn.is-open i { transform: rotate(180deg); }
+    .map-round-btn i { transition: transform 0.2s ease; }
+    .slide-panel {
+      display: none;
+      width: min(360px, calc(100vw - 2rem));
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+      padding: 0.75rem;
+      z-index: 40;
+      transform-origin: top left;
+    }
+    .slide-panel.open {
+      display: block;
+      animation: slidePanelDown 0.2s ease;
+    }
+    @keyframes slidePanelDown {
+      from { opacity: 0; transform: translateY(-10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #111827;
+      margin-bottom: 0.55rem;
+    }
+    .slide-panel-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+      margin-bottom: 0.55rem;
+    }
+    .slide-panel-row:last-child { margin-bottom: 0; }
+    .slide-field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      min-width: 0;
+      flex: 1 1 100%;
+    }
+    .slide-field label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #6b7280;
+    }
+    .slide-field input[type="number"],
+    .slide-field select {
+      width: 100%;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.5rem;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #111827;
+      background: #fafafa;
+      outline: none;
+    }
+    .slide-field input[type="number"]:focus,
+    .slide-field select:focus {
+      border-color: #111827;
+      background: #fff;
+    }
+    .slide-chip-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+    .slide-chip {
+      appearance: none;
+      border: 1px solid #e5e7eb;
+      background: #f7f7f7;
+      color: #4b5563;
+      border-radius: 999px;
+      padding: 0.3rem 0.65rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .slide-chip.is-selected {
+      background: #111827;
+      border-color: #111827;
+      color: #fff;
+    }
+    .slide-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #374151;
+      cursor: pointer;
+      user-select: none;
+    }
+    .slide-check input { accent-color: #2563eb; }
+    .slide-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.4rem;
+      margin-top: 0.65rem;
+    }
+    .slide-actions .filter-btn { box-shadow: none; }
+  </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col bg-white">
+
+  <nav class="h-14 shrink-0 border-b border-gray-200 px-5 flex justify-between items-center z-30 bg-white">
+    <div class="flex items-center gap-6 min-w-0">
+      <a href="/" th:href="@{/}" class="text-lg font-black text-black tracking-tight tech-font uppercase scale-x-105 shrink-0">EvCharge</a>
+      <div class="hidden sm:flex items-center gap-5 min-w-0">
+        <a href="/map" th:href="@{/map}" class="text-sm font-bold text-blue-600 shrink-0">충전소 찾기</a>
+        <div class="map-legend" aria-label="마커 범례">
+          <span class="map-legend-item" title="내 차량 커넥터와 호환되는 충전소">
+            <svg class="map-legend-pin" viewBox="0 0 18 32" aria-hidden="true">
+              <path d="M9 0C4.029 0 0 4.029 0 9c0 7.2 9 23 9 23s9-15.8 9-23C18 4.029 13.971 0 9 0z" fill="#2563eb"/>
+              <circle cx="9" cy="9" r="3.4" fill="#fff"/>
+            </svg>
+            <span>충전가능</span>
+          </span>
+          <span class="map-legend-item" title="외부인 이용이 가능한 충전소">
+            <svg class="map-legend-pin" viewBox="0 0 18 32" aria-hidden="true">
+              <path d="M9 0C4.029 0 0 4.029 0 9c0 7.2 9 23 9 23s9-15.8 9-23C18 4.029 13.971 0 9 0z" fill="#dc2626"/>
+              <circle cx="9" cy="9" r="3.4" fill="#fff"/>
+            </svg>
+            <span>외부인개방</span>
+          </span>
+          <span class="map-legend-item" title="내 차량 호환 + 외부인 개방">
+            <svg class="map-legend-pin" viewBox="0 0 18 32" aria-hidden="true">
+              <path d="M9 0C4.029 0 0 4.029 0 9c0 7.2 9 23 9 23s9-15.8 9-23C18 4.029 13.971 0 9 0z" fill="#7c3aed"/>
+              <circle cx="9" cy="9" r="3.4" fill="#fff"/>
+            </svg>
+            <span>나의충전/외부인개방</span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 shrink-0">
+      <span class="text-sm font-bold text-gray-700 tech-font" th:if="${username != null}" th:text="${username}">NEXORA</span>
+      <a href="/?to=dash" th:href="@{/(to=dash)}"
+         class="px-3.5 py-1.5 rounded-full border border-gray-200 text-xs font-bold text-gray-700 hover:bg-gray-50 transition shadow-sm">
+        Back to Dashboard
+      </a>
+    </div>
+  </nav>
+
+  <main class="relative flex-1 min-h-0 w-full">
+    <div id="station-map"></div>
+    <div id="map-loading" class="map-loading"><span>불러오는 중...</span></div>
+
+    <div class="pointer-events-none absolute top-3 left-3 right-16 z-20">
+      <div class="pointer-events-auto flex flex-col items-start gap-2">
+        <div class="flex gap-2 pb-1 pr-2 items-center flex-wrap">
+          <button type="button" id="btn-filter-toggle" class="map-round-btn" aria-label="필터 열기" aria-expanded="false" title="필터">
+            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+          </button>
+
+          <label class="filter-chip">
+            <input type="checkbox" id="filter-my-charging" checked>
+            <span>나의충전</span>
+          </label>
+          <button type="button" id="btn-lock-strategy" class="filter-btn">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i><span id="lock-strategy-label">락: -</span>
+          </button>
+          <button type="button" id="btn-refresh" class="filter-btn">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>새로고침</span>
+          </button>
+
+          <button type="button" id="btn-auto-reserve" class="filter-btn">
+            <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+            <span>자동예약</span>
+          </button>
+
+          <div class="filter-dropdown-wrap">
+            <button type="button" id="btn-favorites-list" class="filter-btn">
+              <i data-lucide="star" class="w-3.5 h-3.5"></i>
+              <span>즐겨찾기</span>
+            </button>
+            <div id="favorites-dropdown" class="favorites-dropdown" role="menu"></div>
+          </div>
+        </div>
+
+        <div id="map-filter-panel" class="slide-panel">
+          <div class="slide-panel-title">지도 필터</div>
+          <div class="slide-panel-row">
+            <div class="relative" data-filter-group="connector">
+              <button type="button" class="filter-btn" data-dropdown-toggle>
+                <span data-label>커넥터</span><i data-lucide="chevron-down" class="w-3 h-3 text-gray-400"></i>
+              </button>
+              <div class="filter-dropdown">
+                <button type="button" data-value="ALL" class="is-selected">전체</button>
+                <button type="button" data-value="DC_COMBO">DC콤보</button>
+                <button type="button" data-value="AC_SLOW">AC완속</button>
+                <button type="button" data-value="NACS">NACS</button>
+              </div>
+            </div>
+            <div class="relative" data-filter-group="speed">
+              <button type="button" class="filter-btn" data-dropdown-toggle>
+                <span data-label>충전속도</span><i data-lucide="chevron-down" class="w-3 h-3 text-gray-400"></i>
+              </button>
+              <div class="filter-dropdown">
+                <button type="button" data-value="ALL" class="is-selected">전체</button>
+                <button type="button" data-value="SLOW">완속</button>
+                <button type="button" data-value="FAST">급속</button>
+                <button type="button" data-value="ULTRA">초급속</button>
+              </div>
+            </div>
+            <div class="relative" data-filter-group="parking">
+              <button type="button" class="filter-btn" data-dropdown-toggle>
+                <span data-label>주차요금</span><i data-lucide="chevron-down" class="w-3 h-3 text-gray-400"></i>
+              </button>
+              <div class="filter-dropdown">
+                <button type="button" data-value="ALL" class="is-selected">전체</button>
+                <button type="button" data-value="FREE">무료만</button>
+              </div>
+            </div>
+            <div class="relative" data-filter-group="place">
+              <button type="button" class="filter-btn" data-dropdown-toggle>
+                <span data-label>장소</span><i data-lucide="chevron-down" class="w-3 h-3 text-gray-400"></i>
+              </button>
+              <div class="filter-dropdown">
+                <button type="button" data-value="ALL" class="is-selected">전체</button>
+                <button type="button" data-value="A0">공공시설</button>
+                <button type="button" data-value="B0">주차시설</button>
+                <button type="button" data-value="E0">상업시설</button>
+                <button type="button" data-value="H0">공동주택시설</button>
+                <button type="button" data-value="C0">휴게시설</button>
+                <button type="button" data-value="D0">관광시설</button>
+                <button type="button" data-value="G0">주유소</button>
+                <button type="button" data-value="I0">병원</button>
+                <button type="button" data-value="J0">기타</button>
+              </div>
+            </div>
+            <label class="filter-chip">
+              <input type="checkbox" id="filter-external-open">
+              <span>외부인개방</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="absolute top-3 right-3 z-20 flex flex-col gap-2">
+      <button type="button" id="btn-my-location" class="map-ctrl rounded-lg" aria-label="내 위치" title="내 위치">
+        <i data-lucide="navigation" class="w-4 h-4"></i>
+      </button>
+      <div class="flex flex-col overflow-hidden rounded-lg">
+        <button type="button" id="btn-zoom-in" class="map-ctrl rounded-none border-b-0" aria-label="확대">+</button>
+        <button type="button" id="btn-zoom-out" class="map-ctrl rounded-none" aria-label="축소">−</button>
+      </div>
+    </div>
+
+    <aside id="station-panel" aria-hidden="true">
+      <div class="sp-header">
+        <button type="button" class="sp-favorite-toggle" id="sp-favorite-toggle" aria-label="즐겨찾기" aria-pressed="false">
+          <i data-lucide="star" class="w-4 h-4"></i>
+        </button>
+        <button type="button" class="sp-close" id="station-panel-close" aria-label="닫기">&times;</button>
+        <h2 id="sp-name">충전소</h2>
+        <p id="sp-address">-</p>
+      </div>
+      <div class="sp-body">
+        <section class="sp-section">
+          <div class="sp-stat-grid">
+            <div class="sp-stat-card available">
+              <div class="num" id="sp-available">0</div>
+              <div class="lbl">사용가능</div>
+              <div class="hint">대기 없음</div>
+            </div>
+            <div class="sp-stat-card inuse">
+              <div class="num" id="sp-inuse">0</div>
+              <div class="lbl">사용중</div>
+              <div class="hint">충전 진행</div>
+            </div>
+            <div class="sp-stat-card waiting">
+              <div class="num"><span id="sp-waiting">0</span></div>
+              <div class="lbl">예약 대기자</div>
+              <div class="hint">명</div>
+            </div>
+            <div class="sp-stat-card other">
+              <div class="num" id="sp-other">0</div>
+              <div class="lbl">그 외</div>
+              <div class="hint">점검·통신·중지</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="sp-section" id="sp-fee-section">
+          <div class="sp-section-title">요금 안내</div>
+          <div class="sp-fee-grid" id="sp-fee-grid"></div>
+        </section>
+
+        <section class="sp-section">
+          <div class="sp-section-title">
+            <span>충전기 현황 <span class="sp-info-dot" title="상태·속도 안내">i</span></span>
+            <span class="meta" id="sp-total">총 0기</span>
+          </div>
+          <div class="sp-warn">
+            <p>이 금액은 안내가(추정)입니다.</p>
+            <button type="button" id="sp-show-fee">금액 보기</button>
+          </div>
+          <div class="sp-legend" id="sp-status-legend"></div>
+          <div class="sp-legend" id="sp-band-legend"></div>
+          <div class="sp-charger-list" id="sp-charger-list"></div>
+        </section>
+
+        <section class="sp-section">
+          <div class="sp-section-title">시설 정보</div>
+          <div class="sp-kv">
+            <div class="sp-kv-row"><span class="k">운영시간</span><span class="v" id="sp-use-time">-</span></div>
+            <div class="sp-kv-row"><span class="k">충전 요금</span><span class="v" id="sp-charging-fee">-</span></div>
+            <div class="sp-kv-row"><span class="k">주차 요금</span><span class="v" id="sp-parking">-</span></div>
+            <div class="sp-kv-row"><span class="k">연락처</span><span class="v" id="sp-call">-</span></div>
+            <div class="sp-kv-row"><span class="k">운영사</span><span class="v" id="sp-busi">-</span></div>
+          </div>
+        </section>
+
+        <section class="sp-section">
+          <div class="sp-section-title">참고사항</div>
+          <p class="sp-note" id="sp-note">-</p>
+        </section>
+      </div>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <div id="reserve-modal" class="reserve-modal-overlay" aria-hidden="true">
+    <div class="reserve-modal" role="dialog" aria-modal="true" aria-labelledby="rm-charger-label">
+      <h3 id="rm-charger-label">충전기 예약</h3>
+      <p id="rm-charger-sub">-</p>
+      <p class="rm-note">예약 후 <strong>15분</strong> 이내 도착하지 않으면 자동 취소됩니다.</p>
+      <div class="rm-actions">
+        <button type="button" id="rm-cancel">취소</button>
+        <button type="button" id="rm-confirm">예약 확정</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript"
+          th:src="|https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoApiKey}|"></script>
+
+  <script th:inline="javascript">
+    const currentUserId = /*[[${userId}]]*/ null;
+    const vehicleBrand = /*[[${vehicleBrand}]]*/ null;
+    const vehicleModel = /*[[${vehicleModel}]]*/ null;
+
+    const SEOUL_LAT = 37.566826;
+    const SEOUL_LNG = 126.9786567;
+    const DEFAULT_RADIUS_KM = 3;
+
+    let stationMap = null;
+    let currentCenter = null;
+    let currentLat = SEOUL_LAT;
+    let currentLng = SEOUL_LNG;
+    let markerImages = null;
+
+    let cachedStations = [];
+    let markerEntries = [];
+    let currentPanelStationId = null;
+    let currentFavoriteIds = new Set();
+    let isCurrentFavorite = false;
+
+    const filters = {
+      connector: "ALL",
+      speed: "ALL",
+      parking: "ALL",
+      place: "ALL",
+      myCharging: true,
+      externalOpen: false
+    };
+
+    function showToast(message) {
+      const el = document.getElementById("toast");
+      el.textContent = message;
+      el.classList.add("show");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(function () { el.classList.remove("show"); }, 2400);
+    }
+
+    function setLoading(on) {
+      document.getElementById("map-loading").classList.toggle("show", !!on);
+    }
+
+    function pinSvg(color) {
+      const svg =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="32" viewBox="0 0 18 32">' +
+        '<path d="M9 0C4.029 0 0 4.029 0 9c0 7.2 9 23 9 23s9-15.8 9-23C18 4.029 13.971 0 9 0z" fill="' + color + '"/>' +
+        '<circle cx="9" cy="9" r="3.4" fill="#fff"/>' +
+        "</svg>";
+      return "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg);
+    }
+
+    function buildMarkerImages() {
+      const size = new kakao.maps.Size(18, 32);
+      const option = { offset: new kakao.maps.Point(9, 32) };
+      return {
+        blue: new kakao.maps.MarkerImage(pinSvg("#2563eb"), size, option),
+        red: new kakao.maps.MarkerImage(pinSvg("#dc2626"), size, option),
+        purple: new kakao.maps.MarkerImage(pinSvg("#7c3aed"), size, option)
+      };
+    }
+
+    function resolveCoords() {
+      return new Promise(function (resolve) {
+        if (!navigator.geolocation) {
+          resolve({ lat: SEOUL_LAT, lng: SEOUL_LNG });
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          },
+          function () {
+            resolve({ lat: SEOUL_LAT, lng: SEOUL_LNG });
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    }
+
+    function markerColorKey(station) {
+      const my = !!station.isMyChargingMatch;
+      const ext = !!station.isExternallyOpen;
+
+      // 나의충전만: 호환 충전소는 전부 파란 마커 (외부인개방 여부와 무관)
+      if (filters.myCharging && !filters.externalOpen) {
+        return my ? "blue" : null;
+      }
+      // 외부인개방만: 빨간 마커
+      if (!filters.myCharging && filters.externalOpen) {
+        return ext ? "red" : null;
+      }
+      // 둘 다: 교집합 보라, 나의충전만 파란, 외부인만 빨간
+      if (filters.myCharging && filters.externalOpen) {
+        if (my && ext) return "purple";
+        if (my) return "blue";
+        if (ext) return "red";
+      }
+      return null;
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function passesClientFilters(station) {
+      if (filters.myCharging && !filters.externalOpen && !station.isMyChargingMatch) return false;
+      if (!filters.myCharging && filters.externalOpen && !station.isExternallyOpen) return false;
+      if (filters.myCharging && filters.externalOpen) {
+        if (!station.isMyChargingMatch && !station.isExternallyOpen) return false;
+      }
+      if (!filters.myCharging && !filters.externalOpen) return false;
+
+      if (filters.connector === "DC_COMBO" && !(station.fastAvailable > 0)) return false;
+      if (filters.connector === "AC_SLOW" && !(station.slowAvailable > 0)) return false;
+      if (filters.connector === "NACS") return false;
+
+      if (filters.speed === "SLOW" && !(station.slowAvailable > 0)) return false;
+      if (filters.speed === "FAST" && !(station.fastAvailable > 0)) return false;
+      if (filters.speed === "ULTRA" && !(station.fastAvailable > 0)) return false;
+
+      if (filters.parking === "FREE" && station.parkingFree !== "Y") return false;
+
+      if (filters.place !== "ALL" && station.kind !== filters.place) return false;
+
+      return true;
+    }
+
+    function clearMarkers() {
+      markerEntries.forEach(function (entry) {
+        entry.marker.setMap(null);
+      });
+      markerEntries = [];
+    }
+
+    function renderMarkers(stations) {
+      clearMarkers();
+      stations.forEach(function (station) {
+        if (!passesClientFilters(station)) return;
+        const colorKey = markerColorKey(station);
+        if (!colorKey) return;
+        if (station.latitude == null || station.longitude == null) return;
+
+        const position = new kakao.maps.LatLng(station.latitude, station.longitude);
+        const marker = new kakao.maps.Marker({
+          map: stationMap,
+          position: position,
+          image: markerImages[colorKey],
+          title: station.name || ""
+        });
+
+        kakao.maps.event.addListener(marker, "click", function () {
+          openStationDetail(station.id);
+        });
+
+        markerEntries.push({ marker: marker, station: station });
+      });
+    }
+
+    const FEE_GUIDE = [
+      { band: "완속", price: "250", unit: "원/kWh" },
+      { band: "중속", price: "280", unit: "원/kWh" },
+      { band: "급속", price: "320", unit: "원/kWh" },
+      { band: "급속+", price: "360", unit: "원/kWh" },
+      { band: "초급속", price: "400", unit: "원/kWh" }
+    ];
+
+    function statusLabel(status, myReservation) {
+      if (myReservation) return "내 예약";
+      if (status === "AVAILABLE") return "사용가능";
+      if (status === "CHARGING") return "충전중";
+      if (status === "RESERVED") return "예약중";
+      return "사용불가";
+    }
+
+    function statusBadgeClass(status, myReservation) {
+      if (myReservation) return "mine";
+      if (status === "AVAILABLE") return "available";
+      if (status === "CHARGING") return "charging";
+      if (status === "RESERVED") return "reserved";
+      return "broken";
+    }
+
+    function requireUserId() {
+      if (currentUserId == null) {
+        showToast("로그인이 필요합니다");
+        return null;
+      }
+      return currentUserId;
+    }
+
+    function parseErrorMessage(res, fallback) {
+      return res.text().then(function (text) {
+        if (!text) return fallback + " (" + res.status + ")";
+        try {
+          const json = JSON.parse(text);
+          return json.message || json.error || text || fallback;
+        } catch (e) {
+          return text || fallback;
+        }
+      });
+    }
+
+    function refreshFavoriteState(stationId) {
+      const btn = document.getElementById("sp-favorite-toggle");
+      if (!btn) return Promise.resolve();
+      const userId = currentUserId;
+      if (userId == null) {
+        isCurrentFavorite = false;
+        btn.classList.remove("is-active");
+        btn.setAttribute("aria-pressed", "false");
+        return Promise.resolve();
+      }
+      return fetch("/api/favorites/" + encodeURIComponent(userId), { credentials: "same-origin" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("favorites " + res.status);
+          return res.json();
+        })
+        .then(function (list) {
+          currentFavoriteIds = new Set(
+            (Array.isArray(list) ? list : []).map(function (f) { return f.stationId; })
+          );
+          isCurrentFavorite = currentFavoriteIds.has(stationId);
+          btn.classList.toggle("is-active", isCurrentFavorite);
+          btn.setAttribute("aria-pressed", isCurrentFavorite ? "true" : "false");
+          if (window.lucide) lucide.createIcons();
+        })
+        .catch(function (err) {
+          console.error(err);
+        });
+    }
+
+    function toggleFavorite() {
+      const userId = requireUserId();
+      if (userId == null || currentPanelStationId == null) return;
+
+      const stationId = currentPanelStationId;
+      const btn = document.getElementById("sp-favorite-toggle");
+      btn.disabled = true;
+
+      const req = isCurrentFavorite
+        ? fetch("/api/favorites/" + encodeURIComponent(stationId) + "?userId=" + encodeURIComponent(userId), {
+            method: "DELETE",
+            credentials: "same-origin"
+          })
+        : fetch("/api/favorites", {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId: userId, stationId: stationId })
+          });
+
+      req.then(function (res) {
+          if (!res.ok && res.status !== 204) {
+            return parseErrorMessage(res, "즐겨찾기 처리 실패").then(function (msg) {
+              throw new Error(msg);
+            });
+          }
+          isCurrentFavorite = !isCurrentFavorite;
+          if (isCurrentFavorite) currentFavoriteIds.add(stationId);
+          else currentFavoriteIds.delete(stationId);
+          btn.classList.toggle("is-active", isCurrentFavorite);
+          btn.setAttribute("aria-pressed", isCurrentFavorite ? "true" : "false");
+          showToast(isCurrentFavorite ? "즐겨찾기에 추가했습니다" : "즐겨찾기를 해제했습니다");
+          if (window.lucide) lucide.createIcons();
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast(err.message || "즐겨찾기 처리에 실패했습니다");
+        })
+        .finally(function () {
+          btn.disabled = false;
+        });
+    }
+
+    function openReserveModal(chargerId, label, sub) {
+      const userId = requireUserId();
+      if (userId == null) return;
+      const modal = document.getElementById("reserve-modal");
+      modal.dataset.chargerId = String(chargerId);
+      document.getElementById("rm-charger-label").textContent = label || "충전기 예약";
+      document.getElementById("rm-charger-sub").textContent = sub || "-";
+      document.getElementById("rm-confirm").disabled = false;
+      modal.classList.add("open");
+      modal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeReserveModal() {
+      const modal = document.getElementById("reserve-modal");
+      modal.classList.remove("open");
+      modal.setAttribute("aria-hidden", "true");
+      delete modal.dataset.chargerId;
+      document.getElementById("rm-confirm").disabled = false;
+    }
+
+    function confirmManualReserve() {
+      const userId = requireUserId();
+      if (userId == null) return;
+      const modal = document.getElementById("reserve-modal");
+      const chargerId = Number(modal.dataset.chargerId);
+      if (!Number.isFinite(chargerId)) {
+        closeReserveModal();
+        return;
+      }
+      const confirmBtn = document.getElementById("rm-confirm");
+      confirmBtn.disabled = true;
+      fetch("/api/reservations/manual", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: userId, chargerId: chargerId })
+      })
+        .then(function (res) {
+          closeReserveModal();
+          if (res.status === 201 || res.ok) {
+            showToast("예약 완료! 15분 이내 도착해주세요");
+            if (currentPanelStationId != null) openStationDetail(currentPanelStationId);
+            return null;
+          }
+          if (res.status === 409) {
+            return parseErrorMessage(res, "이미 예약되었습니다").then(function (msg) {
+              showToast(msg || "이미 예약되었습니다");
+              if (currentPanelStationId != null) openStationDetail(currentPanelStationId);
+              return null;
+            });
+          }
+          return parseErrorMessage(res, "예약 실패").then(function (msg) {
+            throw new Error(msg);
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast(err.message || "예약에 실패했습니다");
+          if (currentPanelStationId != null) openStationDetail(currentPanelStationId);
+        });
+    }
+
+    function closeOverlayPanels(exceptId) {
+      document.querySelectorAll(".filter-dropdown.open, .favorites-dropdown.open, .slide-panel.open").forEach(function (el) {
+        if (exceptId && el.id === exceptId) return;
+        el.classList.remove("open");
+      });
+      const filterBtn = document.getElementById("btn-filter-toggle");
+      const filterPanel = document.getElementById("map-filter-panel");
+      if (filterBtn && (!filterPanel || !filterPanel.classList.contains("open"))) {
+        filterBtn.classList.remove("is-open");
+        filterBtn.setAttribute("aria-expanded", "false");
+      }
+    }
+
+    function toggleMapFilterPanel() {
+      const panel = document.getElementById("map-filter-panel");
+      const btn = document.getElementById("btn-filter-toggle");
+      const willOpen = !panel.classList.contains("open");
+      closeOverlayPanels(willOpen ? "map-filter-panel" : null);
+      panel.classList.toggle("open", willOpen);
+      btn.classList.toggle("is-open", willOpen);
+      btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function runAutoReserveWithSavedSettings() {
+      const userId = requireUserId();
+      if (userId == null) return;
+      setLoading(true);
+      fetch("/api/reservations/auto", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: userId,
+          lat: currentLat,
+          lng: currentLng
+        })
+      })
+        .then(function (res) {
+          if (!res.ok) {
+            return parseErrorMessage(res, "자동예약 실패").then(function (msg) {
+              throw new Error(msg);
+            });
+          }
+          return res.json();
+        })
+        .then(function (data) {
+          showToast("자동예약 완료! 10분 이내 도착해주세요");
+          if (data.stationId != null) openStationDetail(data.stationId);
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast(err.message || "자동예약에 실패했습니다");
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    function toggleFavoritesDropdown() {
+      const dropdown = document.getElementById("favorites-dropdown");
+      const willOpen = !dropdown.classList.contains("open");
+      closeOverlayPanels(willOpen ? "favorites-dropdown" : null);
+      if (!willOpen) return;
+
+      const userId = requireUserId();
+      if (userId == null) return;
+
+      dropdown.innerHTML = '<div class="empty">불러오는 중...</div>';
+      dropdown.classList.add("open");
+
+      fetch("/api/favorites/" + encodeURIComponent(userId), { credentials: "same-origin" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("favorites " + res.status);
+          return res.json();
+        })
+        .then(function (list) {
+          const items = Array.isArray(list) ? list : [];
+          currentFavoriteIds = new Set(items.map(function (f) { return f.stationId; }));
+          if (!items.length) {
+            dropdown.innerHTML = '<div class="empty">즐겨찾기가 없습니다</div>';
+            return;
+          }
+          dropdown.innerHTML = items.map(function (f) {
+            const lat = f.latitude != null ? f.latitude : "";
+            const lng = f.longitude != null ? f.longitude : "";
+            return (
+              '<button type="button" data-station-id="' + f.stationId + '"' +
+              ' data-lat="' + lat + '" data-lng="' + lng + '">' +
+              escapeHtml(f.stationName || ("충전소 #" + f.stationId)) +
+              "</button>"
+            );
+          }).join("");
+          dropdown.querySelectorAll("button[data-station-id]").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              const stationId = Number(btn.getAttribute("data-station-id"));
+              const lat = Number(btn.getAttribute("data-lat"));
+              const lng = Number(btn.getAttribute("data-lng"));
+              dropdown.classList.remove("open");
+              reserveFavoriteStation(stationId, lat, lng);
+            });
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+          dropdown.innerHTML = '<div class="empty">불러오지 못했습니다</div>';
+        });
+    }
+
+    function panMapTo(lat, lng) {
+      if (!stationMap || !window.kakao || !kakao.maps) return;
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+      const pos = new kakao.maps.LatLng(lat, lng);
+      currentLat = lat;
+      currentLng = lng;
+      currentCenter = pos;
+      stationMap.setCenter(pos);
+      stationMap.setLevel(Math.min(stationMap.getLevel(), 4));
+    }
+
+    function reserveFavoriteStation(stationId, lat, lng) {
+      const userId = requireUserId();
+      if (userId == null) return;
+      panMapTo(lat, lng);
+      fetch("/api/favorites/" + encodeURIComponent(stationId) + "/reserve?userId=" + encodeURIComponent(userId), {
+        method: "POST",
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (res.status === 409) {
+            return parseErrorMessage(res, "이미 예약되었습니다").then(function (msg) {
+              showToast(msg || "이미 예약되었습니다");
+              openStationDetail(stationId);
+              return null;
+            });
+          }
+          if (!res.ok) {
+            return parseErrorMessage(res, "즐겨찾기 예약 실패").then(function (msg) {
+              throw new Error(msg);
+            });
+          }
+          return res.json();
+        })
+        .then(function (data) {
+          if (!data) return;
+          showToast("즐겨찾기 충전소 예약 완료");
+          openStationDetail(stationId);
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast(err.message || "즐겨찾기 예약에 실패했습니다");
+          openStationDetail(stationId);
+        });
+    }
+
+    function closeStationPanel() {
+      const panel = document.getElementById("station-panel");
+      panel.classList.remove("active");
+      panel.setAttribute("aria-hidden", "true");
+    }
+
+    function openStationPanel(data) {
+      const panel = document.getElementById("station-panel");
+      currentPanelStationId = data.stationId != null ? data.stationId : null;
+      document.getElementById("sp-name").textContent = data.name || "충전소";
+      document.getElementById("sp-address").textContent = data.address || "-";
+      document.getElementById("sp-available").textContent = String(data.availableCount ?? 0);
+      document.getElementById("sp-inuse").textContent = String(data.inUseCount ?? 0);
+      document.getElementById("sp-waiting").textContent = String(data.waitingCount ?? 0);
+      document.getElementById("sp-other").textContent = String(data.otherCount ?? 0);
+      document.getElementById("sp-total").textContent = "총 " + (data.totalChargerCount ?? 0) + "기";
+      document.getElementById("sp-use-time").textContent = data.useTime || "-";
+      document.getElementById("sp-charging-fee").textContent = data.chargingFee || "유료(안내가)";
+      document.getElementById("sp-parking").textContent = data.parkingFree || "-";
+      document.getElementById("sp-call").textContent = data.busiCall || "-";
+      document.getElementById("sp-busi").textContent = data.busiNm || "-";
+      document.getElementById("sp-note").textContent = data.note || "-";
+
+      const primary = data.primaryBand || "";
+      const feeGrid = document.getElementById("sp-fee-grid");
+      feeGrid.innerHTML = FEE_GUIDE.map(function (row) {
+        const active = row.band === primary ? " active" : "";
+        return (
+          '<div class="sp-fee-card' + active + '" data-band="' + row.band + '">' +
+          '<div class="band">' + row.band + "</div>" +
+          '<div class="price">' + row.price + "</div>" +
+          '<div class="unit">' + row.unit + "</div>" +
+          "</div>"
+        );
+      }).join("");
+
+      document.getElementById("sp-status-legend").innerHTML =
+        '<span class="sp-badge available">사용가능</span>' +
+        '<span class="sp-badge charging">충전중</span>' +
+        '<span class="sp-badge mine">내 예약</span>' +
+        '<span class="sp-badge reserved">예약중</span>' +
+        '<span class="sp-badge broken">사용불가</span>';
+
+      document.getElementById("sp-band-legend").innerHTML = FEE_GUIDE.map(function (row) {
+        const cls = row.band === primary ? "sp-badge band is-primary" : "sp-badge band";
+        return '<span class="' + cls + '">' + row.band + "</span>";
+      }).join("");
+
+      const list = document.getElementById("sp-charger-list");
+      const chargers = Array.isArray(data.chargers) ? data.chargers.slice() : [];
+      if (!chargers.length) {
+        list.innerHTML = '<p class="sp-note" style="margin:0">등록된 충전기가 없습니다.</p>';
+      } else {
+        chargers.forEach(function (c, idx) { c._origIndex = idx; });
+        chargers.sort(function (a, b) {
+          const aMine = a.myReservation ? 0 : 1;
+          const bMine = b.myReservation ? 0 : 1;
+          if (aMine !== bMine) return aMine - bMine;
+          return (a._origIndex || 0) - (b._origIndex || 0);
+        });
+        list.innerHTML = chargers.map(function (c) {
+          const output = c.output != null ? c.output + "kW" : "-";
+          const band = c.speedBand || "-";
+          const label = "#" + (c.chgerId || "-");
+          const sub = (c.chargerType || "-") + " · " + output + " · " + band;
+          const mine = !!c.myReservation;
+          let actionBtn = "";
+          if (mine && c.reservationId != null) {
+            actionBtn =
+              '<button type="button" class="sp-cancel-btn" data-reservation-id="' + c.reservationId + '">취소</button>';
+          } else if (c.status === "AVAILABLE" && c.id != null) {
+            actionBtn =
+              '<button type="button" class="sp-reserve-btn"' +
+              ' data-charger-id="' + c.id + '"' +
+              ' data-charger-label="' + escapeHtml(label) + '"' +
+              ' data-charger-sub="' + escapeHtml(sub) + '">예약</button>';
+          }
+          return (
+            '<div class="sp-charger-row' + (mine ? " is-mine" : "") + '">' +
+            '<div class="left">' +
+            '<span class="id">' + escapeHtml(label) + "</span>" +
+            '<span class="sub">' + escapeHtml(sub) + "</span>" +
+            "</div>" +
+            '<div class="right">' +
+            '<span class="sp-badge ' + statusBadgeClass(c.status, mine) + '">' + statusLabel(c.status, mine) + "</span>" +
+            actionBtn +
+            "</div>" +
+            "</div>"
+          );
+        }).join("");
+      }
+
+      panel.classList.add("active");
+      panel.setAttribute("aria-hidden", "false");
+      refreshFavoriteState(currentPanelStationId);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function openStationDetail(stationId) {
+      if (stationId == null) return;
+      let url = "/api/stations/" + encodeURIComponent(stationId) + "/detail";
+      if (currentUserId != null) {
+        url += "?userId=" + encodeURIComponent(currentUserId);
+      }
+      fetch(url, {
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("detail " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          openStationPanel(data);
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast("충전소 상세를 불러오지 못했습니다");
+        });
+    }
+
+    function cancelReservation(reservationId) {
+      const userId = requireUserId();
+      if (userId == null) return;
+      if (!Number.isFinite(reservationId)) return;
+      fetch("/api/reservations/" + encodeURIComponent(reservationId) + "?userId=" + encodeURIComponent(userId), {
+        method: "DELETE",
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (!res.ok) {
+            return parseErrorMessage(res, "예약 취소 실패").then(function (msg) {
+              throw new Error(msg);
+            });
+          }
+          showToast("예약을 취소했습니다");
+          if (currentPanelStationId != null) openStationDetail(currentPanelStationId);
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast(err.message || "예약 취소에 실패했습니다");
+          if (currentPanelStationId != null) openStationDetail(currentPanelStationId);
+        });
+    }
+
+    function applyClientFilters() {
+      renderMarkers(cachedStations);
+    }
+
+    function fetchNearby() {
+      if (!vehicleBrand || !vehicleModel) {
+        showToast("차량 정보가 없습니다. 회원가입 시 차량을 선택해주세요");
+        return Promise.resolve();
+      }
+      const params = new URLSearchParams({
+        lat: String(currentLat),
+        lng: String(currentLng),
+        radius: String(DEFAULT_RADIUS_KM),
+        vehicleBrand: vehicleBrand,
+        vehicleModel: vehicleModel,
+        showExternalOpen: String(!!filters.externalOpen)
+      });
+
+      setLoading(true);
+      return fetch("/api/stations/nearby?" + params.toString(), {
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error("nearby " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          cachedStations = Array.isArray(data) ? data : [];
+          applyClientFilters();
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast("충전소 정보를 불러오지 못했습니다");
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    function refreshStations() {
+      setLoading(true);
+      const params = new URLSearchParams({
+        lat: String(currentLat),
+        lng: String(currentLng),
+        radius: String(DEFAULT_RADIUS_KM)
+      });
+      return fetch("/api/stations/refresh?" + params.toString(), {
+        method: "POST",
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (res.status === 429) {
+            showToast("잠시 후 다시 시도해주세요");
+            return null;
+          }
+          if (!res.ok) throw new Error("refresh " + res.status);
+          return fetchNearby();
+        })
+        .catch(function (err) {
+          console.error(err);
+          showToast("새로고침에 실패했습니다");
+        })
+        .finally(function () {
+          setLoading(false);
+        });
+    }
+
+    function bindFilters() {
+      document.querySelectorAll("[data-filter-group]").forEach(function (group) {
+        const toggle = group.querySelector("[data-dropdown-toggle]");
+        const dropdown = group.querySelector(".filter-dropdown");
+        const label = group.querySelector("[data-label]");
+        const key = group.getAttribute("data-filter-group");
+
+        toggle.addEventListener("click", function (e) {
+          e.stopPropagation();
+          document.querySelectorAll(".filter-dropdown.open").forEach(function (el) {
+            if (el !== dropdown) el.classList.remove("open");
+          });
+          dropdown.classList.toggle("open");
+        });
+
+        dropdown.querySelectorAll("button[data-value]").forEach(function (btn) {
+          btn.addEventListener("click", function (e) {
+            e.stopPropagation();
+            dropdown.querySelectorAll("button").forEach(function (b) { b.classList.remove("is-selected"); });
+            btn.classList.add("is-selected");
+            filters[key] = btn.getAttribute("data-value");
+            const text = btn.textContent.trim();
+            label.textContent = text === "전체"
+              ? (key === "connector" ? "커넥터" : key === "speed" ? "충전속도" : key === "parking" ? "주차요금" : "장소")
+              : text;
+            toggle.classList.toggle("is-active", filters[key] !== "ALL");
+            dropdown.classList.remove("open");
+            applyClientFilters();
+          });
+        });
+      });
+
+      document.addEventListener("click", function (e) {
+        if (e.target.closest("#reserve-modal, #station-panel, #map-filter-panel, #btn-filter-toggle, .filter-dropdown-wrap, [data-filter-group]")) {
+          return;
+        }
+        closeOverlayPanels(null);
+      });
+
+      document.getElementById("btn-filter-toggle").addEventListener("click", function (e) {
+        e.stopPropagation();
+        toggleMapFilterPanel();
+      });
+      document.getElementById("map-filter-panel").addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+
+      document.getElementById("filter-my-charging").addEventListener("change", function (e) {
+        filters.myCharging = e.target.checked;
+        if (!filters.myCharging && !filters.externalOpen) {
+          e.target.checked = true;
+          filters.myCharging = true;
+          showToast("나의충전 또는 외부인개방 중 하나는 켜져야 합니다");
+          return;
+        }
+        fetchNearby();
+      });
+
+      document.getElementById("filter-external-open").addEventListener("change", function (e) {
+        filters.externalOpen = e.target.checked;
+        if (!filters.myCharging && !filters.externalOpen) {
+          e.target.checked = true;
+          filters.externalOpen = true;
+          showToast("나의충전 또는 외부인개방 중 하나는 켜져야 합니다");
+          return;
+        }
+        fetchNearby();
+      });
+
+      document.getElementById("btn-refresh").addEventListener("click", function () {
+        refreshStations();
+      });
+
+      (function initLockStrategyToggle() {
+        var btn = document.getElementById("btn-lock-strategy");
+        var label = document.getElementById("lock-strategy-label");
+        if (!btn || !label) return;
+
+        function labelText(strategy) {
+          return strategy === "REDISSON" ? "락: Redisson" : "락: 비관적";
+        }
+
+        function applyStrategy(strategy) {
+          var value = (strategy || "PESSIMISTIC").toUpperCase();
+          label.textContent = labelText(value);
+          btn.dataset.strategy = value;
+          btn.classList.toggle("is-active", value === "REDISSON");
+        }
+
+        function loadStrategy() {
+          return fetch("/api/admin/lock-strategy")
+            .then(function (res) {
+              if (!res.ok) throw new Error("락 전략 조회 실패");
+              return res.json();
+            })
+            .then(function (data) {
+              applyStrategy(data && data.strategy);
+            })
+            .catch(function (err) {
+              console.error(err);
+              applyStrategy("PESSIMISTIC");
+            });
+        }
+
+        btn.addEventListener("click", function () {
+          var current = (btn.dataset.strategy || "PESSIMISTIC").toUpperCase();
+          var next = current === "REDISSON" ? "PESSIMISTIC" : "REDISSON";
+          fetch("/api/admin/lock-strategy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ strategy: next })
+          })
+            .then(function (res) {
+              if (!res.ok) throw new Error("락 전략 변경 실패");
+              applyStrategy(next);
+              showToast("락 전략: " + (next === "REDISSON" ? "Redisson" : "비관적"));
+            })
+            .catch(function (err) {
+              console.error(err);
+              showToast(err.message || "락 전략 변경에 실패했습니다");
+            });
+        });
+
+        loadStrategy();
+      })();
+
+      document.getElementById("btn-auto-reserve").addEventListener("click", function (e) {
+        e.stopPropagation();
+        runAutoReserveWithSavedSettings();
+      });
+      document.getElementById("btn-favorites-list").addEventListener("click", function (e) {
+        e.stopPropagation();
+        toggleFavoritesDropdown();
+      });
+      document.getElementById("favorites-dropdown").addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+
+      document.getElementById("sp-charger-list").addEventListener("click", function (e) {
+        const cancelBtn = e.target.closest(".sp-cancel-btn");
+        if (cancelBtn) {
+          e.stopPropagation();
+          const reservationId = Number(cancelBtn.getAttribute("data-reservation-id"));
+          if (Number.isFinite(reservationId)) cancelReservation(reservationId);
+          return;
+        }
+        const btn = e.target.closest(".sp-reserve-btn");
+        if (!btn) return;
+        e.stopPropagation();
+        const chargerId = Number(btn.getAttribute("data-charger-id"));
+        if (!Number.isFinite(chargerId)) return;
+        openReserveModal(
+          chargerId,
+          btn.getAttribute("data-charger-label") || "충전기 예약",
+          btn.getAttribute("data-charger-sub") || "-"
+        );
+      });
+      document.getElementById("rm-cancel").addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeReserveModal();
+      });
+      document.getElementById("rm-confirm").addEventListener("click", function (e) {
+        e.stopPropagation();
+        confirmManualReserve();
+      });
+      document.getElementById("reserve-modal").addEventListener("click", function (e) {
+        if (e.target === e.currentTarget) closeReserveModal();
+        e.stopPropagation();
+      });
+      document.querySelector("#reserve-modal .reserve-modal").addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+
+      document.getElementById("station-panel-close").addEventListener("click", function (e) {
+        e.stopPropagation();
+        closeStationPanel();
+      });
+      document.getElementById("station-panel").addEventListener("click", function (e) {
+        e.stopPropagation();
+      });
+      document.getElementById("sp-favorite-toggle").addEventListener("click", function () {
+        toggleFavorite();
+      });
+      document.getElementById("sp-show-fee").addEventListener("click", function () {
+        const fee = document.getElementById("sp-fee-section");
+        if (fee) fee.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    }
+
+    function initStationMap() {
+      if (!window.kakao || !kakao.maps) return;
+
+      const container = document.getElementById("station-map");
+      if (!container) return;
+
+      currentCenter = new kakao.maps.LatLng(currentLat, currentLng);
+      stationMap = new kakao.maps.Map(container, {
+        center: currentCenter,
+        level: 4
+      });
+      markerImages = buildMarkerImages();
+
+      window.addEventListener("resize", function () {
+        if (!stationMap) return;
+        stationMap.relayout();
+        stationMap.setCenter(currentCenter);
+      });
+
+      document.getElementById("btn-zoom-in").addEventListener("click", function () {
+        stationMap.setLevel(stationMap.getLevel() - 1);
+      });
+      document.getElementById("btn-zoom-out").addEventListener("click", function () {
+        stationMap.setLevel(stationMap.getLevel() + 1);
+      });
+      document.getElementById("btn-my-location").addEventListener("click", function () {
+        resolveCoords().then(function (coords) {
+          currentLat = coords.lat;
+          currentLng = coords.lng;
+          currentCenter = new kakao.maps.LatLng(currentLat, currentLng);
+          stationMap.setCenter(currentCenter);
+          fetchNearby();
+        });
+      });
+
+      bindFilters();
+
+      resolveCoords().then(function (coords) {
+        currentLat = coords.lat;
+        currentLng = coords.lng;
+        currentCenter = new kakao.maps.LatLng(currentLat, currentLng);
+        stationMap.setCenter(currentCenter);
+        return fetchNearby();
+      });
+    }
+
+    function pollExpiryAlerts() {
+      if (currentUserId == null) return;
+      fetch("/api/reservations/user/" + encodeURIComponent(currentUserId) + "/expiry-alerts", {
+        credentials: "same-origin"
+      })
+        .then(function (res) {
+          if (!res.ok) return [];
+          return res.json();
+        })
+        .then(function (alerts) {
+          if (!Array.isArray(alerts) || !alerts.length) return;
+          alerts.forEach(function (alert) {
+            showToast(alert.message || "미도착으로 예약이 만료되었습니다");
+            if (alert.stationId != null && currentPanelStationId === alert.stationId) {
+              openStationDetail(alert.stationId);
+            }
+          });
+        })
+        .catch(function (err) {
+          console.error(err);
+        });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+      initStationMap();
+      pollExpiryAlerts();
+      setInterval(pollExpiryAlerts, 15000);
+    });
+  </script>
+</body>
+</html>

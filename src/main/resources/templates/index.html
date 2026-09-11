@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EvCharge</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui"],
+            orbitron: ["Orbitron", "ui-sans-serif", "system-ui"]
+          },
+          colors: { ink: "#111111" }
+        }
+      }
+    };
+  </script>
+
+  <script>
+    window.__landSection2 = new URLSearchParams(location.search).get("to") === "dash";
+    if (window.__landSection2) {
+      document.documentElement.classList.add("land-section2");
+    }
+  </script>
+  <style>
+    html.land-section2 body { visibility: hidden; }
+  </style>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #ffffff;
+      overflow: hidden;
+    }
+
+    .scroll-container {
+      height: 100vh;
+      max-height: 100vh;
+      overflow-x: hidden;
+      overflow-y: scroll;
+      scroll-snap-type: y mandatory;
+      scroll-snap-stop: always;
+      scroll-behavior: smooth;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    #section1,
+    #section2 {
+      height: 100vh;
+      max-height: 100vh;
+      min-height: 100vh;
+      flex-shrink: 0;
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+      position: relative;
+      overflow: hidden;
+      background: #ffffff;
+    }
+
+    /* 차량 z-index: 10 — 글래스(20) 아래 */
+    #car-stage {
+      position: fixed;
+      inset: 0;
+      z-index: 10;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    #car-rig {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      will-change: transform;
+    }
+
+    #car-rig img {
+      display: block;
+      width: min(820px, 62vw);
+      height: auto;
+      user-select: none;
+      -webkit-user-drag: none;
+      filter: drop-shadow(0 20px 32px rgba(17, 17, 17, 0.12));
+    }
+
+    .car-ground-shadow {
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      bottom: 6%;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0) 70%);
+      z-index: -1;
+    }
+
+    #dash-info {
+      position: relative;
+      z-index: 20;
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.42);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.65);
+      box-shadow: 0 14px 40px rgba(17, 17, 17, 0.07);
+    }
+
+    .glass-action {
+      appearance: none;
+      -webkit-appearance: none;
+      font: inherit;
+      color: inherit;
+      background: rgba(245, 245, 245, 0.94);
+      border: 1px solid rgba(17, 17, 17, 0.04);
+      min-height: 64px;
+      width: 100%;
+      cursor: pointer;
+      transition: background-color 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+    }
+    .glass-action:hover {
+      background: rgba(220, 220, 220, 0.95);
+      filter: brightness(0.97);
+    }
+    .glass-action:active {
+      transform: scale(0.985);
+    }
+    .glass-action:focus-visible {
+      outline: 2px solid rgba(17, 17, 17, 0.25);
+      outline-offset: 2px;
+    }
+
+    .mini-card {
+      background: rgba(248, 248, 248, 0.92);
+      border: 1px solid rgba(17, 17, 17, 0.04);
+      box-shadow: 0 8px 24px rgba(17, 17, 17, 0.04);
+    }
+
+    .drive-bar {
+      width: 6px;
+      border-radius: 999px;
+      background: #d4d4d4;
+    }
+    .drive-bar.is-today {
+      background: #111111;
+    }
+
+    #dash-map {
+      position: relative;
+      z-index: 20;
+    }
+
+    .map-deco {
+      background-color: rgba(248, 250, 252, 0.55);
+      background-image:
+        linear-gradient(rgba(17, 17, 17, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(17, 17, 17, 0.04) 1px, transparent 1px),
+        linear-gradient(115deg, transparent 48%, rgba(17, 17, 17, 0.06) 48.5%, rgba(17, 17, 17, 0.06) 51%, transparent 51.5%),
+        linear-gradient(25deg, transparent 42%, rgba(17, 17, 17, 0.05) 42.5%, rgba(17, 17, 17, 0.05) 46%, transparent 46.5%);
+      background-size: 28px 28px, 28px 28px, 100% 100%, 100% 100%;
+    }
+  </style>
+</head>
+<body class="font-sans text-ink antialiased">
+
+  <div id="car-stage" aria-hidden="true">
+    <div id="car-rig" style="display: none !important; opacity: 0 !important; visibility: hidden !important;">
+      <div class="relative">
+        <span class="car-ground-shadow"></span>
+        <img data-vehicle-img alt="" style="display: none !important; opacity: 0 !important; visibility: hidden !important;" />
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-container" id="scroll-root">
+
+    <!-- SECTION 1 -->
+    <section id="section1" class="flex flex-col">
+      <header id="site-header" class="relative z-30 flex items-center justify-between px-8 py-7 md:px-14">
+        <a href="#section1" class="text-[22px] font-extrabold tracking-tight">EvCharge</a>
+        <nav class="flex items-center gap-6 text-[13px] font-medium md:gap-7">
+          <a href="#section2" class="transition hover:opacity-50">My-Info</a>
+          <a href="#section2" class="transition hover:opacity-50">Help</a>
+          <a href="#section2" class="transition hover:opacity-50">Introduce</a>
+          <a th:if="${username == null}"
+             href="/login"
+             th:href="@{/login}"
+             class="rounded-full bg-neutral-900 px-4 py-2 text-white transition hover:bg-neutral-800">
+            Login/Sign up
+          </a>
+          <div th:if="${username != null}" class="flex items-center gap-3">
+            <span class="flex items-center gap-2 text-[13px] font-medium text-ink">
+              <i data-lucide="user" class="h-4 w-4 text-neutral-500"></i>
+              <span class="font-orbitron tracking-wide" th:text="${username}">User</span>
+            </span>
+            <form th:action="@{/logout}" method="post" class="m-0 inline">
+              <button type="submit"
+                      class="cursor-pointer border-0 bg-transparent p-0 text-[12px] font-medium text-neutral-400 transition hover:text-ink">
+                로그아웃
+              </button>
+            </form>
+          </div>
+          <a href="/settings" th:href="@{/settings}"
+             class="rounded-full bg-neutral-100 p-2 text-neutral-600 transition hover:bg-neutral-200"
+             aria-label="설정" title="설정">
+            <i data-lucide="settings" class="h-4 w-4"></i>
+          </a>
+        </nav>
+      </header>
+
+      <div id="hero-copy" class="relative z-30 flex flex-1 items-center px-8 pb-20 md:px-14 lg:px-16">
+        <div class="max-w-xl">
+          <h1 class="text-5xl font-extrabold leading-[1.05] tracking-tight md:text-6xl lg:text-[68px]">
+            Premium Electric Cars Recharge
+          </h1>
+          <p class="mt-6 max-w-md text-[15px] leading-relaxed text-neutral-500">
+            Don't deny yourself the pleasure of driving the best premium electric cars from around the world, here and now.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 2 — 100vh 고정 -->
+    <section id="section2" class="flex flex-col px-5 pb-3 pt-2 md:px-8">
+
+      <header class="relative z-30 mb-1 flex shrink-0 items-center justify-between gap-3">
+        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900 text-white">
+          <i data-lucide="zap" class="h-4 w-4"></i>
+        </span>
+
+        <div class="rounded-full bg-neutral-100 p-1">
+          <div class="flex items-center text-[13px] font-medium">
+            <button type="button" class="tab-btn rounded-full bg-neutral-900 px-5 py-2 text-white">Rent</button>
+            <button type="button" class="tab-btn rounded-full px-5 py-2 text-neutral-500">Buy</button>
+            <button type="button" class="tab-btn rounded-full px-5 py-2 text-neutral-500">Sell</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="hidden items-center gap-2 rounded-full bg-neutral-100 px-3 py-2 text-[12px] text-neutral-600 sm:flex">
+            <i data-lucide="map-pin" class="h-3.5 w-3.5"></i>
+            <span>Your Location: Seoul</span>
+          </div>
+          <a href="/settings" th:href="@{/settings}"
+             class="rounded-full bg-neutral-100 p-2 text-neutral-600 transition hover:bg-neutral-200"
+             aria-label="설정" title="설정">
+            <i data-lucide="settings" class="h-4 w-4"></i>
+          </a>
+        </div>
+      </header>
+
+      <!-- 메인: 좌측 타이틀 / 우측 2x2 + 지도(동일 너비) -->
+      <div class="relative mt-2 flex min-h-0 flex-1 items-stretch justify-between gap-4">
+
+        <div id="dash-copy" class="relative z-30 m-0 ml-[5px] mt-[10px] min-w-0 flex-1 px-1 py-0">
+          <h2 data-vehicle-name class="m-0 text-4xl font-extrabold leading-none tracking-tight md:text-[44px]"></h2>
+          <p data-vehicle-sub class="mt-2 text-[14px] text-neutral-400"></p>
+        </div>
+
+        <div class="relative left-[15px] z-20 flex w-full max-w-[360px] shrink-0 flex-col gap-2.5">
+          <aside id="dash-info" class="glass-panel m-0 w-full shrink-0 rounded-[24px] p-[14px]">
+            <div class="grid grid-cols-2 gap-1.5">
+
+              <button type="button" data-action="range" class="glass-action flex cursor-pointer flex-col justify-between rounded-2xl px-3 py-3 text-left">
+                <div class="flex items-center gap-2 text-neutral-500">
+                  <i data-lucide="battery-charging" class="h-4 w-4"></i>
+                  <span class="text-[12px] font-semibold text-neutral-800">Range</span>
+                </div>
+                <p class="mt-2 text-[17px] font-bold tracking-tight"
+                   th:text="${vehicle != null ? vehicle.rangeKm + ' km' : '--- km'}">--- km</p>
+              </button>
+
+              <button type="button" data-action="efficiency" class="glass-action flex cursor-pointer flex-col justify-between rounded-2xl px-3 py-3 text-left">
+                <div class="flex items-center gap-2 text-neutral-500">
+                  <i data-lucide="zap" class="h-4 w-4"></i>
+                  <span class="text-[12px] font-semibold text-neutral-800">Efficiency</span>
+                </div>
+                <p class="mt-2 text-[17px] font-bold tracking-tight"
+                   th:text="${vehicle != null ? vehicle.efficiency + ' km/kWh' : '--- km/kWh'}">--- km/kWh</p>
+              </button>
+
+              <button type="button" data-action="service" class="glass-action flex cursor-pointer flex-col justify-between rounded-2xl px-3 py-3 text-left">
+                <div class="flex items-center gap-2 text-neutral-500">
+                  <i data-lucide="wrench" class="h-4 w-4"></i>
+                  <span class="text-[12px] font-semibold text-neutral-800">Service</span>
+                </div>
+                <p class="mt-2 text-[17px] font-bold tracking-tight">--- months</p>
+              </button>
+
+              <button type="button" data-action="payment" class="glass-action flex cursor-pointer flex-col justify-between rounded-2xl px-3 py-3 text-left">
+                <div class="flex items-center gap-2">
+                  <span class="flex h-5 w-7 items-center justify-center rounded-md bg-gradient-to-br from-amber-200 to-yellow-500">
+                    <span class="h-2 w-3.5 rounded-sm border border-black/10"></span>
+                  </span>
+                  <span class="text-[12px] font-semibold text-neutral-800">Payment</span>
+                </div>
+                <div class="mt-2 flex items-center justify-between gap-1">
+                  <p class="truncate font-mono text-[11px] tracking-wide text-neutral-600">3451 **** 7886</p>
+                  <span class="h-2 w-2 shrink-0 rounded-full bg-emerald-500"></span>
+                </div>
+              </button>
+
+            </div>
+          </aside>
+
+          <!-- 실시간 충전 위치 지도 — dash-info와 동일 너비 -->
+          <div id="dash-map" class="glass-panel relative min-h-0 w-full flex-1 rounded-2xl p-2.5">
+            <div id="live-map" class="map-deco relative h-[220px] min-h-[220px] w-full overflow-hidden rounded-xl bg-gray-50/50">
+              <div class="pointer-events-none absolute inset-0 opacity-40" aria-hidden="true">
+                <span class="absolute left-[12%] top-[28%] h-px w-[38%] rotate-12 bg-neutral-300"></span>
+                <span class="absolute left-[40%] top-[55%] h-px w-[45%] -rotate-6 bg-neutral-300"></span>
+                <span class="absolute left-[22%] top-[18%] h-[52%] w-px bg-neutral-200"></span>
+                <span class="absolute right-[28%] top-[12%] h-[60%] w-px bg-neutral-200"></span>
+              </div>
+
+              <div class="absolute left-1/2 top-1/2 z-[1] -translate-x-1/2 -translate-y-1/2">
+                <span class="absolute left-1/2 top-1/2 h-10 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/35 animate-ping"></span>
+                <span class="absolute left-1/2 top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-400/25 animate-ping" style="animation-delay: 0.35s;"></span>
+                <span class="relative z-[2] flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-white shadow-[0_6px_18px_rgba(16,185,129,0.45)]">
+                  <i data-lucide="map-pin" class="h-4 w-4"></i>
+                </span>
+              </div>
+
+              <p class="absolute bottom-2.5 left-3 text-[11px] font-medium tracking-wide text-neutral-400">
+                Live charging location
+              </p>
+
+              <a href="/map"
+                 th:href="@{/map}"
+                 class="absolute bottom-2.5 right-2.5 z-[3] flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-black text-white transition hover:bg-gray-800"
+                 aria-label="Open map">
+                <i data-lucide="plus" class="h-4 w-4"></i>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 하단 3분할: Battery / Drive / Weather (컴팩트) -->
+      <div id="dash-bottom" class="relative z-30 mt-2.5 grid shrink-0 grid-cols-1 gap-2 md:grid-cols-3">
+
+        <article class="mini-card relative flex items-center gap-3 overflow-hidden rounded-[20px] px-4 py-2.5">
+          <div class="absolute inset-y-0 left-0 rounded-[20px] bg-emerald-500 transition-all duration-500"
+               style="width: 84%;"
+               th:style="|width: ${vehicle != null ? vehicle.batteryPercent : 84}%|"></div>
+          <span class="relative z-10 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/80 text-neutral-600">
+            <i data-lucide="battery-charging" class="h-4 w-4"></i>
+          </span>
+          <div class="relative z-10 min-w-0">
+            <p class="text-[22px] font-bold leading-none tracking-tigh.\gradlew.bat bootRunt"
+               th:text="${vehicle != null ? vehicle.batteryPercent + '%' : '84%'}">84%</p>
+            <p class="mt-1 truncate text-[11px] text-neutral-400"
+               th:text="${vehicle != null and vehicle.isCharging ? '초고속 충전 중' : '배터리 잔량'}">초고속 충전 중 · 완충까지 35분</p>
+          </div>
+        </article>
+
+        <article class="mini-card flex items-center justify-between gap-3 rounded-[20px] px-4 py-2.5">
+          <div class="min-w-0">
+            <p class="text-[12px] font-medium text-neutral-500">Today</p>
+            <p class="mt-0.5 text-[18px] font-bold leading-none tracking-tight"
+               th:text="${vehicle != null ? 'Today: ' + vehicle.todayDistanceKm + ' km' : 'Today: --.- km'}">--.- km</p>
+          </div>
+          <div class="flex h-10 items-end gap-1.5 pr-1" aria-hidden="true">
+            <span class="drive-bar" style="height: 38%"></span>
+            <span class="drive-bar" style="height: 55%"></span>
+            <span class="drive-bar" style="height: 42%"></span>
+            <span class="drive-bar" style="height: 70%"></span>
+            <span class="drive-bar" style="height: 48%"></span>
+            <span class="drive-bar is-today" style="height: 88%"></span>
+            <span class="drive-bar" style="height: 30%; opacity: 0.45"></span>
+          </div>
+        </article>
+
+        <article class="mini-card flex items-center gap-3 rounded-[20px] px-4 py-2.5" data-weather-card>
+          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-neutral-600">
+            <i data-lucide="cloud-sun" class="h-4 w-4" data-weather-icon></i>
+          </span>
+          <div class="min-w-0">
+            <p class="text-[22px] font-bold leading-none tracking-tight" data-weather-temp>24°C</p>
+            <p class="mt-1 truncate text-[11px] text-neutral-400" data-weather-desc>구름 조금 · Seoul</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  </div>
+  <script>
+    if (window.__landSection2) {
+      var __sc = document.getElementById("scroll-root");
+      var __s2 = document.getElementById("section2");
+      if (__sc && __s2) __sc.scrollTop = __s2.offsetTop;
+    }
+  </script>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script type="text/javascript"
+          th:src="|https://dapi.kakao.com/v2/maps/sdk.js?appkey=${kakaoApiKey}|"></script>
+
+  <script th:inline="javascript">
+    function initLiveMap() {
+      const fallbackLat = /*[[${userLat}]]*/ null || 37.566826;
+      const fallbackLng = /*[[${userLng}]]*/ null || 126.9786567;
+
+      if (!window.kakao || !kakao.maps) return;
+
+      kakao.maps.load(function () {
+        const container = document.getElementById("live-map");
+        if (!container) return;
+
+        let currentCenter = new kakao.maps.LatLng(fallbackLat, fallbackLng);
+        const map = new kakao.maps.Map(container, {
+          center: currentCenter,
+          level: 4
+        });
+
+        let marker = new kakao.maps.Marker({
+          map: map,
+          position: currentCenter
+        });
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            function (position) {
+              currentCenter = new kakao.maps.LatLng(
+                position.coords.latitude,
+                position.coords.longitude
+              );
+              map.setCenter(currentCenter);
+              if (marker) marker.setMap(null);
+              marker = new kakao.maps.Marker({
+                map: map,
+                position: currentCenter
+              });
+            },
+            function (error) {
+              console.error("Geolocation failed:", error.message || error);
+            },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          );
+        } else {
+          console.error("Geolocation not supported");
+        }
+
+        window.addEventListener("resize", function () {
+          map.relayout();
+          map.setCenter(currentCenter);
+        });
+      });
+    }
+  </script>
+
+  <script th:inline="javascript">
+    /* Thymeleaf가 서버에서 전달받을 vehicle 엔티티 객체 바인딩 */
+    const dbVehicle = /*[[${vehicle}]]*/ null;
+
+    const currentVehicle = {
+      name: (dbVehicle && dbVehicle.brand && dbVehicle.model)
+        ? (dbVehicle.brand + " " + dbVehicle.model)
+        : "차량 미등록",
+      subText: dbVehicle
+        ? (dbVehicle.isCharging ? "Electric Vehicle (Charging)" : "Electric Vehicle")
+        : "회원가입 시 차량을 선택해주세요",
+      imgUrl: "/images/ioniq5n.webp",
+      stats: {
+        range: dbVehicle && dbVehicle.rangeKm != null ? (dbVehicle.rangeKm + " km") : "-- km",
+        efficiency: dbVehicle && dbVehicle.efficiency != null ? (dbVehicle.efficiency + " km/kWh") : "-- km/kWh",
+        service: "12 months"
+      }
+    };
+  </script>
+
+  <script>
+    var SEOUL_WEATHER_LAT = 37.566826;
+    var SEOUL_WEATHER_LNG = 126.9786567;
+
+    function weatherFromCode(code) {
+      var c = Number(code);
+      if (c === 0) return { label: "맑음", icon: "sun" };
+      if (c === 1 || c === 2) return { label: "구름 조금", icon: "cloud-sun" };
+      if (c === 3) return { label: "흐림", icon: "cloud" };
+      if (c === 45 || c === 48) return { label: "안개", icon: "cloud-fog" };
+      if (c >= 51 && c <= 67) return { label: "비", icon: "cloud-rain" };
+      if (c >= 71 && c <= 77) return { label: "눈", icon: "snowflake" };
+      if (c >= 80 && c <= 82) return { label: "소나기", icon: "cloud-rain" };
+      if (c >= 95 && c <= 99) return { label: "뇌우", icon: "cloud-lightning" };
+      return { label: "흐림", icon: "cloud" };
+    }
+
+    function resolveWeatherCoords() {
+      return new Promise(function (resolve) {
+        if (!navigator.geolocation) {
+          resolve({ lat: SEOUL_WEATHER_LAT, lng: SEOUL_WEATHER_LNG });
+          return;
+        }
+        navigator.geolocation.getCurrentPosition(
+          function (pos) {
+            resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          },
+          function () {
+            resolve({ lat: SEOUL_WEATHER_LAT, lng: SEOUL_WEATHER_LNG });
+          },
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      });
+    }
+
+    function fetchPlaceName(lat, lng) {
+      var url =
+        "https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=" +
+        encodeURIComponent(lat) +
+        "&longitude=" +
+        encodeURIComponent(lng) +
+        "&localityLanguage=ko";
+      return fetch(url)
+        .then(function (res) {
+          if (!res.ok) throw new Error("geocode " + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          return data.city || data.locality || data.principalSubdivision || "Seoul";
+        })
+        .catch(function () {
+          return "Seoul";
+        });
+    }
+
+    function fetchOpenMeteo(lat, lng) {
+      var url =
+        "https://api.open-meteo.com/v1/forecast?latitude=" +
+        encodeURIComponent(lat) +
+        "&longitude=" +
+        encodeURIComponent(lng) +
+        "&current=temperature_2m,weather_code";
+      return fetch(url).then(function (res) {
+        if (!res.ok) throw new Error("weather " + res.status);
+        return res.json();
+      });
+    }
+
+    function patchWeatherCard(tempC, label, city, iconName) {
+      var tempEl = document.querySelector("[data-weather-temp]");
+      var descEl = document.querySelector("[data-weather-desc]");
+      var iconEl = document.querySelector("[data-weather-icon]");
+      if (tempEl) tempEl.textContent = Math.round(tempC) + "°C";
+      if (descEl) descEl.textContent = label + " · " + city;
+      if (iconEl) {
+        iconEl.setAttribute("data-lucide", iconName);
+        if (window.lucide) lucide.createIcons();
+      }
+    }
+
+    function initWeather() {
+      resolveWeatherCoords()
+        .then(function (coords) {
+          return Promise.all([
+            fetchOpenMeteo(coords.lat, coords.lng),
+            fetchPlaceName(coords.lat, coords.lng)
+          ]);
+        })
+        .then(function (results) {
+          var weather = results[0];
+          var city = results[1];
+          var current = weather && weather.current;
+          if (!current) return;
+          var mapped = weatherFromCode(current.weather_code);
+          patchWeatherCard(current.temperature_2m, mapped.label, city, mapped.icon);
+        })
+        .catch(function (err) {
+          console.error("Weather failed:", err);
+        });
+    }
+  </script>
+
+  <script>
+    function renderVehicle() {
+      document.querySelectorAll("[data-vehicle-name]").forEach(function (el) {
+        el.textContent = currentVehicle.name;
+      });
+      document.querySelectorAll("[data-vehicle-sub]").forEach(function (el) {
+        el.textContent = currentVehicle.subText;
+      });
+      document.querySelectorAll("[data-vehicle-img]").forEach(function (el) {
+        el.src = currentVehicle.imgUrl;
+        el.alt = currentVehicle.name;
+      });
+    }
+
+    function initTabs() {
+      document.querySelectorAll(".tab-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          document.querySelectorAll(".tab-btn").forEach(function (b) {
+            b.classList.remove("bg-neutral-900", "text-white");
+            b.classList.add("text-neutral-500");
+          });
+          btn.classList.add("bg-neutral-900", "text-white");
+          btn.classList.remove("text-neutral-500");
+        });
+      });
+    }
+
+    function waitForImage(img) {
+      if (img.complete && img.naturalWidth) return Promise.resolve();
+      return new Promise(function (resolve) {
+        img.addEventListener("load", resolve, { once: true });
+        img.addEventListener("error", resolve, { once: true });
+      });
+    }
+
+    function layoutPositions() {
+      var vw = window.innerWidth;
+      return {
+        offX: vw + 40,
+        heroX: Math.max(vw * 0.72, vw * 0.55),
+        dashX: vw * 0.02,
+        heroYPercent: -42,
+        dashYPercent: -48
+      };
+    }
+
+    function initMotion() {
+      gsap.registerPlugin(ScrollTrigger);
+
+      var scroller = document.querySelector("#scroll-root");
+      var rig = document.querySelector("#car-rig");
+      var section2 = document.querySelector("#section2");
+      var pos = layoutPositions();
+      var scrollDrive = null;
+      var landSection2 = !!window.__landSection2;
+
+      ScrollTrigger.defaults({ scroller: scroller });
+
+      function applyPageState(isDash) {
+        if (isDash) {
+          gsap.set("#hero-copy", { opacity: 0, y: -32 });
+          gsap.set("#dash-copy, #dash-info, #dash-map, #dash-bottom", { opacity: 1 });
+          gsap.set(rig, {
+            x: pos.dashX,
+            yPercent: pos.dashYPercent,
+            y: 0,
+            opacity: 1,
+            visibility: "visible"
+          });
+        } else {
+          gsap.set("#hero-copy", { opacity: 1, y: 0 });
+          gsap.set("#dash-copy, #dash-info, #dash-map, #dash-bottom", { opacity: 0 });
+          gsap.set(rig, {
+            x: pos.heroX,
+            yPercent: pos.heroYPercent,
+            y: 0,
+            opacity: 1,
+            visibility: "visible"
+          });
+        }
+        gsap.set("#dash-info", { y: 0, clearProps: "transform" });
+      }
+
+      function buildScrollDrive() {
+        if (scrollDrive) {
+          if (scrollDrive.scrollTrigger) scrollDrive.scrollTrigger.kill();
+          scrollDrive.kill();
+        }
+
+        pos = layoutPositions();
+
+        scrollDrive = gsap.timeline({
+          scrollTrigger: {
+            trigger: "#section2",
+            scroller: scroller,
+            start: "top bottom",
+            end: "top top",
+            scrub: 1.5,
+            invalidateOnRefresh: true,
+            onLeaveBack: function () {
+              applyPageState(false);
+            },
+            onEnter: function () {
+              /* progress handled by timeline */
+            },
+            onEnterBack: function () {
+              /* scrubbing back into range */
+            }
+          }
+        });
+
+        var ir = { immediateRender: false };
+
+        scrollDrive.fromTo(
+          rig,
+          { x: pos.heroX, yPercent: pos.heroYPercent, y: 0 },
+          Object.assign({
+            x: pos.dashX,
+            yPercent: pos.dashYPercent,
+            y: 0,
+            duration: 1,
+            ease: "power2.inOut"
+          }, ir),
+          0
+        );
+        scrollDrive.fromTo(
+          "#hero-copy",
+          { opacity: 1, y: 0 },
+          Object.assign({ opacity: 0, y: -32, duration: 0.45, ease: "power1.out" }, ir),
+          0
+        );
+        scrollDrive.fromTo(
+          "#dash-copy, #dash-info",
+          { opacity: 0 },
+          Object.assign({ opacity: 1, duration: 0.4, ease: "power1.out" }, ir),
+          0.25
+        );
+        scrollDrive.fromTo(
+          "#dash-map",
+          { opacity: 0 },
+          Object.assign({ opacity: 1, duration: 0.35, ease: "power1.out" }, ir),
+          0.35
+        );
+        scrollDrive.fromTo(
+          "#dash-bottom",
+          { opacity: 0 },
+          Object.assign({ opacity: 1, duration: 0.35, ease: "power1.out" }, ir),
+          0.4
+        );
+      }
+
+      function unlockRigAndReveal() {
+        var img = rig.querySelector("[data-vehicle-img]");
+        rig.style.setProperty("display", "block", "important");
+        rig.style.removeProperty("opacity");
+        rig.style.removeProperty("visibility");
+        if (img) {
+          img.style.setProperty("display", "block", "important");
+          img.style.removeProperty("opacity");
+          img.style.removeProperty("visibility");
+        }
+        document.documentElement.classList.remove("land-section2");
+        if (landSection2 && window.history && window.history.replaceState) {
+          window.history.replaceState(null, "", "/");
+        }
+      }
+
+      function syncScrollTrigger() {
+        ScrollTrigger.refresh();
+        if (scrollDrive && scrollDrive.scrollTrigger) {
+          scrollDrive.scrollTrigger.update();
+        }
+      }
+
+      requestAnimationFrame(function () {
+        unlockRigAndReveal();
+
+        if (landSection2) {
+          if (scroller && section2) scroller.scrollTop = section2.offsetTop;
+          applyPageState(true);
+          buildScrollDrive();
+          requestAnimationFrame(function () {
+            if (scroller && section2) scroller.scrollTop = section2.offsetTop;
+            syncScrollTrigger();
+            applyPageState(true);
+          });
+          return;
+        }
+
+        gsap.set("#dash-copy, #dash-info, #dash-map, #dash-bottom", { opacity: 0 });
+        gsap.set("#hero-copy", { opacity: 1, y: 0 });
+        gsap.set("#dash-info", { y: 0, clearProps: "transform" });
+        gsap.set(rig, {
+          x: pos.offX,
+          yPercent: pos.heroYPercent,
+          y: 0,
+          opacity: 0,
+          visibility: "visible"
+        });
+
+        gsap.to(rig, {
+          x: pos.heroX,
+          opacity: 1,
+          duration: 1.8,
+          ease: "power3.out",
+          onComplete: function () {
+            buildScrollDrive();
+            syncScrollTrigger();
+          }
+        });
+      });
+
+      window.addEventListener("resize", function () {
+        pos = layoutPositions();
+        var onPage2 = scroller.scrollTop >= window.innerHeight * 0.5;
+        applyPageState(onPage2);
+        if (scrollDrive) buildScrollDrive();
+        syncScrollTrigger();
+        if (onPage2 && section2) scroller.scrollTop = section2.offsetTop;
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      renderVehicle();
+      initTabs();
+      initLiveMap();
+      initWeather();
+      if (window.lucide) lucide.createIcons();
+
+      var img = document.querySelector("[data-vehicle-img]");
+      waitForImage(img).then(function () {
+        requestAnimationFrame(initMotion);
+      });
+    });
+  </script>
+</body>
+</html>

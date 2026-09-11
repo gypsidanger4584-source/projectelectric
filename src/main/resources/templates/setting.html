@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — EvCharge</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Orbitron:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui"],
+            orbitron: ["Orbitron", "ui-sans-serif", "system-ui"]
+          },
+          colors: { ink: "#111111", mint: "#00A876" }
+        }
+      }
+    };
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #f5f5f5; }
+    .settings-shell {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+    }
+    @media (max-width: 860px) {
+      .settings-shell { grid-template-columns: 1fr; }
+      .settings-sidebar { border-right: 0; border-bottom: 1px solid #e5e7eb; }
+    }
+    .settings-sidebar {
+      background: #fff;
+      border-right: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      padding: 1.25rem 1rem;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: #6b7280;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 0.7rem 0.85rem;
+      border-radius: 0.85rem;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-item:hover { background: #f3f4f6; color: #111; }
+    .nav-item.active {
+      background: #111111;
+      color: #fff;
+    }
+    .nav-section-label {
+      margin: 1.25rem 0.85rem 0.45rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #9ca3af;
+      text-transform: uppercase;
+    }
+    .settings-main {
+      padding: 1.75rem 1.75rem 2.5rem;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 1.25rem;
+      padding: 1.35rem 1.4rem;
+      box-shadow: 0 10px 30px rgba(17, 17, 17, 0.04);
+      max-width: 720px;
+    }
+    .field-label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #374151;
+      margin-bottom: 0.45rem;
+    }
+    .field-hint {
+      font-size: 0.72rem;
+      color: #9ca3af;
+      margin-top: 0.35rem;
+    }
+    .seg {
+      display: inline-flex;
+      background: #f3f4f6;
+      border-radius: 999px;
+      padding: 0.2rem;
+      gap: 0.15rem;
+    }
+    .seg button {
+      border: 0;
+      background: transparent;
+      border-radius: 999px;
+      padding: 0.45rem 0.95rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #6b7280;
+      cursor: pointer;
+    }
+    .seg button.is-on {
+      background: #111;
+      color: #fff;
+    }
+    .settings-select, .settings-input {
+      width: 100%;
+      border: 1px solid #e5e7eb;
+      border-radius: 0.75rem;
+      padding: 0.65rem 0.8rem;
+      font-size: 0.875rem;
+      color: #111;
+      background: #fff;
+      outline: none;
+    }
+    .settings-select:focus, .settings-input:focus {
+      border-color: #111;
+    }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.85rem 0;
+      border-top: 1px solid #f3f4f6;
+    }
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 26px;
+      flex-shrink: 0;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle span {
+      position: absolute;
+      inset: 0;
+      background: #e5e7eb;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .toggle span::after {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      left: 3px;
+      top: 3px;
+      background: #fff;
+      border-radius: 999px;
+      transition: transform 0.15s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    }
+    .toggle input:checked + span { background: #00A876; }
+    .toggle input:checked + span::after { transform: translateX(18px); }
+    .save-btn {
+      border: 0;
+      border-radius: 999px;
+      background: #00A876;
+      color: #fff;
+      font-weight: 700;
+      font-size: 0.875rem;
+      padding: 0.7rem 1.35rem;
+      cursor: pointer;
+    }
+    .save-btn:hover { background: #00966a; }
+    .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 1.5rem;
+      transform: translateX(-50%) translateY(120%);
+      background: #111;
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.7rem 1.1rem;
+      border-radius: 999px;
+      z-index: 50;
+      transition: transform 0.25s ease;
+      pointer-events: none;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="settings-shell">
+    <aside class="settings-sidebar">
+      <a href="/" th:href="@{/}" class="mb-6 flex items-center gap-2 px-2 no-underline">
+        <span class="flex h-9 w-9 items-center justify-center rounded-full bg-ink text-white">
+          <i data-lucide="zap" class="h-4 w-4"></i>
+        </span>
+        <span class="font-orbitron text-sm font-bold tracking-wide text-ink">EvCharge</span>
+      </a>
+
+      <a class="nav-item" href="/?to=dash" th:href="@{/(to=dash)}">
+        <i data-lucide="layout-dashboard" class="h-4 w-4"></i>
+        <span>대시보드</span>
+      </a>
+      <a class="nav-item" href="/map" th:href="@{/map}">
+        <i data-lucide="map" class="h-4 w-4"></i>
+        <span>충전소 찾기</span>
+      </a>
+
+      <div class="nav-section-label">Settings</div>
+      <a class="nav-item active" href="/settings" th:href="@{/settings}">
+        <i data-lucide="sliders-horizontal" class="h-4 w-4"></i>
+        <span>자동예약 · 즐겨찾기</span>
+      </a>
+
+      <div class="nav-section-label">Account</div>
+      <a class="nav-item" href="#" th:href="@{/settings}" onclick="return false;" title="추후 구현 예정">
+        <i data-lucide="key-round" class="h-4 w-4"></i>
+        <span>비밀번호 찾기</span>
+      </a>
+      <a class="nav-item" href="#" th:href="@{/settings}" onclick="return false;" title="추후 구현 예정">
+        <i data-lucide="mail-search" class="h-4 w-4"></i>
+        <span>Email 찾기</span>
+      </a>
+
+      <div class="mt-auto px-2 pt-8">
+        <div class="rounded-2xl bg-neutral-50 p-3">
+          <p class="text-[11px] font-semibold text-neutral-500" th:if="${username != null}" th:text="${username}">User</p>
+          <p class="mt-1 text-[11px] text-neutral-400">저장한 조건으로 자동예약이 바로 실행됩니다.</p>
+        </div>
+      </div>
+    </aside>
+
+    <main class="settings-main">
+      <div class="mb-5 flex items-end justify-between gap-3">
+        <div>
+          <p class="text-[12px] font-semibold uppercase tracking-wider text-neutral-400">Preferences</p>
+          <h1 class="mt-1 text-3xl font-extrabold tracking-tight text-ink">자동예약 · 즐겨찾기</h1>
+          <p class="mt-2 text-sm text-neutral-500">지도 자동예약과 즐겨찾기 예약에 공통으로 적용됩니다.</p>
+        </div>
+        <a href="/?to=dash" th:href="@{/(to=dash)}" class="text-sm font-semibold text-neutral-500 hover:text-ink">돌아가기</a>
+      </div>
+
+      <div class="panel" th:if="${userId == null}">
+        <p class="text-sm text-neutral-600">설정을 저장하려면 로그인이 필요합니다.</p>
+        <a href="/login" th:href="@{/login}" class="mt-4 inline-flex save-btn no-underline">로그인</a>
+      </div>
+
+      <form id="settings-form" class="panel space-y-6" th:if="${userId != null}">
+        <div>
+          <span class="field-label">충전 속도 우선</span>
+          <div class="seg" data-seg="speedPriority">
+            <button type="button" data-value="FAST" class="is-on">급속 우선</button>
+            <button type="button" data-value="SLOW">완속 우선</button>
+            <button type="button" data-value="ALL">전체</button>
+          </div>
+          <p class="field-hint">가능하면 선택한 속도의 충전기를 먼저 예약합니다. (전체는 속도 제한 없음)</p>
+        </div>
+
+        <div>
+          <label class="field-label" for="set-parking">주차요금</label>
+          <select id="set-parking" class="settings-select">
+            <option value="ALL">전체</option>
+            <option value="FREE">무료만</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="field-label" for="set-place">장소</label>
+          <select id="set-place" class="settings-select">
+            <option value="ALL">전체</option>
+            <option value="A0">공공시설</option>
+            <option value="B0">주차시설</option>
+            <option value="E0">상업시설</option>
+            <option value="H0">공동주택시설</option>
+            <option value="C0">휴게시설</option>
+            <option value="D0">관광시설</option>
+            <option value="G0">주유소</option>
+            <option value="I0">병원</option>
+            <option value="J0">기타</option>
+          </select>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="text-sm font-bold text-ink">외부인개방만</div>
+            <p class="field-hint" style="margin:0.2rem 0 0">제한이 없는 충전소만 대상으로 합니다.</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="set-external-open" />
+            <span></span>
+          </label>
+        </div>
+
+        <div>
+          <label class="field-label" for="set-distance">최대 이동거리 (km)</label>
+          <input id="set-distance" class="settings-input" type="number" min="0.5" max="3" step="0.5" value="3" />
+          <p class="field-hint">현재 반경 기준으로 최대 3km까지 설정할 수 있습니다.</p>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="submit" id="btn-save-settings" class="save-btn">설정 저장</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <script th:inline="javascript">
+    const currentUserId = /*[[${userId}]]*/ null;
+    let speedPriority = "FAST";
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(function () { el.classList.remove("show"); }, 2200);
+    }
+
+    function applyToForm(data) {
+      speedPriority = data.speedPriority === "SLOW" ? "SLOW"
+        : data.speedPriority === "ALL" ? "ALL"
+        : "FAST";
+      document.querySelectorAll('[data-seg="speedPriority"] button').forEach(function (btn) {
+        btn.classList.toggle("is-on", btn.getAttribute("data-value") === speedPriority);
+      });
+      document.getElementById("set-parking").value = data.parking || "ALL";
+      document.getElementById("set-place").value = data.place || "ALL";
+      document.getElementById("set-external-open").checked = !!data.externalOpenOnly;
+      const dist = Number(data.maxDistanceKm);
+      document.getElementById("set-distance").value = String(
+        Number.isFinite(dist) ? Math.min(3, Math.max(0.5, dist)) : 3
+      );
+    }
+
+    function loadSettings() {
+      if (currentUserId == null) return;
+      fetch("/api/settings/" + encodeURIComponent(currentUserId), { credentials: "same-origin" })
+        .then(function (res) {
+          if (!res.ok) throw new Error("load " + res.status);
+          return res.json();
+        })
+        .then(applyToForm)
+        .catch(function (err) {
+          console.error(err);
+          showToast("설정을 불러오지 못했습니다");
+        });
+    }
+
+    function bindForm() {
+      const form = document.getElementById("settings-form");
+      if (!form) return;
+
+      document.querySelectorAll('[data-seg="speedPriority"] button').forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          speedPriority = btn.getAttribute("data-value");
+          document.querySelectorAll('[data-seg="speedPriority"] button').forEach(function (b) {
+            b.classList.toggle("is-on", b === btn);
+          });
+        });
+      });
+
+      form.addEventListener("submit", function (e) {
+        e.preventDefault();
+        if (currentUserId == null) return;
+        let maxDistanceKm = Number(document.getElementById("set-distance").value);
+        if (!Number.isFinite(maxDistanceKm) || maxDistanceKm <= 0) maxDistanceKm = 3;
+        maxDistanceKm = Math.min(3, maxDistanceKm);
+
+        const btn = document.getElementById("btn-save-settings");
+        btn.disabled = true;
+        fetch("/api/settings/" + encodeURIComponent(currentUserId), {
+          method: "PUT",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            speedPriority: speedPriority,
+            parking: document.getElementById("set-parking").value,
+            place: document.getElementById("set-place").value,
+            externalOpenOnly: document.getElementById("set-external-open").checked,
+            maxDistanceKm: maxDistanceKm
+          })
+        })
+          .then(function (res) {
+            if (!res.ok) throw new Error("save " + res.status);
+            return res.json();
+          })
+          .then(function (data) {
+            applyToForm(data);
+            showToast("설정을 저장했습니다");
+          })
+          .catch(function (err) {
+            console.error(err);
+            showToast("저장에 실패했습니다");
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+      bindForm();
+      loadSettings();
+    });
+  </script>
+</body>
+</html>

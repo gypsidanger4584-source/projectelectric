@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login — EvCharge</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui"] },
+          colors: {
+            ink: "#111111",
+            neon: { light: "#00D2FF", deep: "#0066FF" }
+          }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #ffffff;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.78);
+      box-shadow:
+        0 14px 40px rgba(17, 17, 17, 0.07),
+        0 0 0 1px rgba(0, 210, 255, 0.04);
+    }
+
+    .auth-input {
+      appearance: none;
+      width: 100%;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid #e5e5e5;
+      border-radius: 0;
+      padding: 0.85rem 0;
+      font: inherit;
+      font-size: 14px;
+      color: #111111;
+      outline: none;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .auth-input::placeholder {
+      color: #a3a3a3;
+    }
+
+    .auth-input:hover {
+      border-bottom-color: #d4d4d4;
+    }
+
+    .auth-input:focus {
+      border-bottom-color: #00D2FF;
+      box-shadow: 0 6px 18px -8px rgba(0, 210, 255, 0.55);
+    }
+
+    .auth-check {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1px solid #d4d4d4;
+      border-radius: 4px;
+      background: #ffffff;
+      cursor: pointer;
+      transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .auth-check:checked {
+      background: linear-gradient(135deg, #00D2FF, #0066FF);
+      border-color: #0066FF;
+      box-shadow: 0 0 10px rgba(0, 210, 255, 0.4);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E"),
+        linear-gradient(135deg, #00D2FF, #0066FF);
+      background-size: 10px, 100%;
+      background-position: center, center;
+      background-repeat: no-repeat, no-repeat;
+    }
+
+    .auth-check:focus-visible {
+      outline: 2px solid rgba(0, 210, 255, 0.45);
+      outline-offset: 2px;
+    }
+
+    .cta-login {
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .cta-login:hover {
+      background: linear-gradient(90deg, #00D2FF, #0066FF);
+      box-shadow: 0 0 20px rgba(0, 210, 255, 0.4), 0 0 36px rgba(0, 102, 255, 0.22);
+    }
+  </style>
+</head>
+<body class="font-sans text-ink antialiased">
+
+  <main class="flex min-h-screen min-h-[100vh] items-center justify-center px-5 py-10">
+    <section class="glass-card w-full max-w-[420px] rounded-3xl px-8 py-10 md:px-10 md:py-12">
+
+      <div class="mb-9">
+        <a href="index.html" th:href="@{/}" class="inline-flex items-center gap-2 text-[22px] font-extrabold tracking-tight text-ink">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white shadow-[0_0_14px_rgba(0,210,255,0.35)]">
+            <i data-lucide="zap" class="h-3.5 w-3.5"></i>
+          </span>
+          EvCharge
+        </a>
+        <p class="mt-3 text-[13px] leading-relaxed text-neutral-400">
+          Welcome back. Please enter your details.
+        </p>
+      </div>
+
+      <p class="mb-5 text-[13px] text-red-500"
+         th:if="${param.error}"
+         th:text="${param.error[0] == 'locked'} ? '로그인 시도가 너무 많습니다. 15분 후 다시 시도해주세요.' : 'Invalid username or password.'">
+        Invalid username or password.
+      </p>
+      <p class="mb-5 hidden text-[13px] text-neutral-500"
+         th:if="${param.logout}"
+         th:class="'mb-5 text-[13px] text-neutral-500'">
+        You have been signed out.
+      </p>
+
+      <!-- Spring Security Form Login: POST /login, username · password · remember-me, CSRF via th:action -->
+      <form action="/login" th:action="@{/login}" method="POST" autocomplete="on" class="space-y-6">
+
+        <div>
+          <label for="username" class="mb-1 block text-[12px] font-medium text-neutral-500">
+            Email
+          </label>
+          <input
+            id="username"
+            name="username"
+            type="email"
+            inputmode="email"
+            lang="en"
+            autocomplete="email"
+            required
+            autofocus
+            placeholder="email@example.com"
+            class="auth-input"
+          />
+        </div>
+
+        <div>
+          <label for="password" class="mb-1 block text-[12px] font-medium text-neutral-500">
+            Password
+          </label>
+          <div class="relative">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+              placeholder="••••••••"
+              class="auth-input pr-8"
+            />
+            <button
+              type="button"
+              id="toggle-password"
+              class="absolute right-0 top-1/2 -translate-y-1/2 cursor-pointer text-neutral-400 transition hover:text-neon-deep"
+              aria-label="Show password"
+            >
+              <i data-lucide="eye" class="h-4 w-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-4 pt-1">
+          <label for="remember-me" class="flex cursor-pointer items-center gap-2 text-[13px] text-neutral-500">
+            <input
+              id="remember-me"
+              name="remember-me"
+              type="checkbox"
+              value="true"
+              class="auth-check"
+            />
+            Remember me
+          </label>
+          <a href="/forgot-password" class="text-[13px] text-neutral-400 transition hover:text-neon-deep">
+            Forgot password?
+          </a>
+        </div>
+
+        <button
+          type="submit"
+          class="cta-login mt-2 w-full cursor-pointer rounded-full bg-black py-3.5 text-[14px] font-semibold text-white"
+        >
+          Sign in
+        </button>
+      </form>
+
+      <p class="mt-8 text-center text-[13px] text-neutral-400">
+        Don't have an account?
+        <a href="signup.html" th:href="@{/signup}" class="font-medium text-ink transition hover:text-neon-deep">Sign up</a>
+      </p>
+
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+
+      var toggle = document.getElementById("toggle-password");
+      var password = document.getElementById("password");
+      if (!toggle || !password) return;
+
+      toggle.addEventListener("click", function () {
+        var hidden = password.type === "password";
+        password.type = hidden ? "text" : "password";
+        toggle.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+        toggle.innerHTML = hidden
+          ? '<i data-lucide="eye-off" class="h-4 w-4"></i>'
+          : '<i data-lucide="eye" class="h-4 w-4"></i>';
+        if (window.lucide) lucide.createIcons();
+      });
+    });
+  </script>
+</body>
+</html>

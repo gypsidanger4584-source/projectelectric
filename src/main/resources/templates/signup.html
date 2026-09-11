@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign up — EvCharge</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui"] },
+          colors: { ink: "#111111" }
+        }
+      }
+    };
+  </script>
+
+  <style>
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+      background: #ffffff;
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid rgba(255, 255, 255, 0.78);
+      box-shadow: 0 14px 40px rgba(17, 17, 17, 0.07);
+    }
+
+    .auth-input {
+      appearance: none;
+      width: 100%;
+      background: #fafafa;
+      border: 1px solid #e8e8e8;
+      border-radius: 14px;
+      padding: 0.8rem 0.95rem;
+      font: inherit;
+      font-size: 14px;
+      color: #111111;
+      outline: none;
+      transition: border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .auth-input::placeholder {
+      color: #a3a3a3;
+    }
+
+    .auth-input:hover {
+      border-color: #d4d4d4;
+    }
+
+    .auth-input:focus {
+      border-color: #111111;
+      background: #ffffff;
+      box-shadow: 0 0 0 1px #111111;
+    }
+
+    .brand-chip {
+      appearance: none;
+      border: 1px solid #ececec;
+      background: #f7f7f7;
+      color: #737373;
+      border-radius: 999px;
+      padding: 0.45rem 0.8rem;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .brand-chip:hover {
+      background: #e8e8e8;
+      color: #111111;
+    }
+
+    .brand-chip.is-active {
+      background: #111111;
+      border-color: #111111;
+      color: #ffffff;
+    }
+
+    .vehicle-option {
+      appearance: none;
+      width: 100%;
+      text-align: left;
+      border: 1px solid #ececec;
+      background: #fafafa;
+      border-radius: 14px;
+      padding: 0.75rem 0.9rem;
+      font: inherit;
+      font-size: 13px;
+      color: #404040;
+      cursor: pointer;
+      transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    .vehicle-option:hover {
+      background: #f0f0f0;
+      color: #111111;
+    }
+
+    .vehicle-option.is-selected {
+      background: #111111;
+      border-color: #111111;
+      color: #ffffff;
+    }
+
+    .vehicle-list {
+      max-height: 168px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+  </style>
+</head>
+<body class="font-sans text-ink antialiased">
+
+  <main class="flex min-h-screen min-h-[100vh] items-center justify-center px-5 py-10">
+    <section class="glass-card w-full max-w-[460px] rounded-3xl px-8 py-10 md:px-10 md:py-12">
+
+      <div class="mb-8">
+        <a href="index.html" th:href="@{/}" class="inline-flex items-center gap-2 text-[22px] font-extrabold tracking-tight text-ink">
+          <span class="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-900 text-white">
+            <i data-lucide="zap" class="h-3.5 w-3.5"></i>
+          </span>
+          EvCharge
+        </a>
+        <p class="mt-3 text-[13px] leading-relaxed text-neutral-400">
+          Create your account
+        </p>
+      </div>
+
+      <p class="mb-5 text-[13px] text-red-500" th:if="${error}" th:text="${error}"></p>
+
+      <form action="/signup" th:action="@{/signup}" method="POST" autocomplete="on" class="space-y-5">
+
+        <div>
+          <label for="email" class="mb-1.5 block text-[12px] font-medium text-neutral-500">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+            autofocus
+            placeholder="you@example.com"
+            class="auth-input"
+          />
+        </div>
+
+        <div>
+          <label for="username" class="mb-1.5 block text-[12px] font-medium text-neutral-500">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            required
+            placeholder="your name"
+            class="auth-input"
+          />
+        </div>
+
+        <div>
+          <label for="password" class="mb-1.5 block text-[12px] font-medium text-neutral-500">Password</label>
+          <div class="relative">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="new-password"
+              required
+              minlength="8"
+              maxlength="72"
+              pattern="(?=.*[A-Za-z])(?=.*\d).{8,}"
+              title="영문과 숫자를 포함해 8자 이상"
+              placeholder="••••••••"
+              class="auth-input pr-11"
+            />
+            <button
+              type="button"
+              id="toggle-password"
+              class="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer text-neutral-400 transition hover:text-ink"
+              aria-label="Show password"
+            >
+              <i data-lucide="eye" class="h-4 w-4"></i>
+            </button>
+          </div>
+          <p class="mt-1.5 text-[11px] text-neutral-400">영문·숫자 포함 8자 이상</p>
+        </div>
+
+        <!-- Select Your EV: brand tabs + search + model list -->
+        <div class="pt-1">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <label class="text-[12px] font-medium text-neutral-500">Select Your EV <span class="text-red-500">*</span></label>
+            <span id="selected-label" class="truncate text-[11px] text-neutral-400">차량을 선택하세요</span>
+          </div>
+
+          <div class="relative mb-3">
+            <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-neutral-400"></i>
+            <input
+              id="vehicle-search"
+              type="search"
+              placeholder="Search your vehicle..."
+              class="auth-input pl-9"
+              autocomplete="off"
+            />
+          </div>
+
+          <div id="brand-tabs" class="mb-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="EV brands"></div>
+
+          <div id="vehicle-list" class="vehicle-list space-y-2" role="listbox" aria-label="Vehicle models"></div>
+
+          <input type="hidden" id="vehicleBrand" name="vehicleBrand" value="" required />
+          <input type="hidden" id="vehicleModel" name="vehicleModel" value="" required />
+        </div>
+
+        <button
+          type="submit"
+          class="mt-2 w-full cursor-pointer rounded-full bg-black py-3.5 text-[14px] font-semibold text-white transition hover:bg-gray-800"
+        >
+          Create account
+        </button>
+      </form>
+
+      <p class="mt-8 text-center text-[13px] text-neutral-400">
+        Already have an account?
+        <a href="login.html" th:href="@{/login}" class="font-medium text-ink transition hover:opacity-60">Log in</a>
+      </p>
+
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    var EV_DATA = {
+      "테슬라": ["Model3", "ModelY", "ModelS", "ModelX", "Cybertruck"],
+      "현대": ["아이오닉5", "아이오닉6", "아이오닉9", "코나EV", "넥쏘"],
+      "기아": ["EV6", "EV9", "니로EV", "EV3", "EV4"],
+      "포르쉐": ["타이칸", "타이칸크로스투리스모", "마칸일렉트릭", "타이칸4S", "타이칸터보"],
+      "쉐보레": ["볼트EV", "볼트EUV", "이쿼녹스EV", "블레이저EV", "실버라도EV"]
+    };
+
+    var brands = Object.keys(EV_DATA);
+    var activeBrand = brands[0];
+    var selected = { brand: "", model: "" };
+    var searchQuery = "";
+
+    function renderBrandTabs() {
+      var tabs = document.getElementById("brand-tabs");
+      tabs.innerHTML = brands.map(function (brand) {
+        var active = brand === activeBrand ? " is-active" : "";
+        return '<button type="button" class="brand-chip' + active + '" data-brand="' + brand + '">' + brand + "</button>";
+      }).join("");
+
+      tabs.querySelectorAll("[data-brand]").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          activeBrand = btn.getAttribute("data-brand");
+          renderBrandTabs();
+          renderVehicleList();
+        });
+      });
+    }
+
+    function getFilteredModels() {
+      var q = searchQuery.trim().toLowerCase();
+      if (!q) {
+        return EV_DATA[activeBrand].map(function (model) {
+          return { brand: activeBrand, model: model };
+        });
+      }
+
+      var results = [];
+      brands.forEach(function (brand) {
+        EV_DATA[brand].forEach(function (model) {
+          var hay = (brand + " " + model).toLowerCase();
+          if (hay.indexOf(q) !== -1) {
+            results.push({ brand: brand, model: model });
+          }
+        });
+      });
+      return results;
+    }
+
+    function renderVehicleList() {
+      var list = document.getElementById("vehicle-list");
+      var items = getFilteredModels();
+
+      if (!items.length) {
+        list.innerHTML = '<p class="px-1 py-3 text-center text-[12px] text-neutral-400">No vehicles found.</p>';
+        return;
+      }
+
+      list.innerHTML = items.map(function (item) {
+        var selectedCls =
+          selected.brand === item.brand && selected.model === item.model ? " is-selected" : "";
+        var label = searchQuery.trim() ? item.brand + " · " + item.model : item.model;
+        return (
+          '<button type="button" class="vehicle-option' + selectedCls + '"' +
+          ' data-brand="' + item.brand + '" data-model="' + item.model + '">' +
+          label +
+          "</button>"
+        );
+      }).join("");
+
+      list.querySelectorAll(".vehicle-option").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          selected.brand = btn.getAttribute("data-brand");
+          selected.model = btn.getAttribute("data-model");
+          activeBrand = selected.brand;
+          document.getElementById("vehicleBrand").value = selected.brand;
+          document.getElementById("vehicleModel").value = selected.model;
+          document.getElementById("selected-label").textContent = selected.brand + " · " + selected.model;
+          renderBrandTabs();
+          renderVehicleList();
+        });
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", function () {
+      if (window.lucide) lucide.createIcons();
+
+      renderBrandTabs();
+      renderVehicleList();
+
+      document.getElementById("vehicle-search").addEventListener("input", function (e) {
+        searchQuery = e.target.value;
+        renderVehicleList();
+      });
+
+      var form = document.querySelector("form[action='/signup'], form[th\\:action]");
+      if (!form) form = document.querySelector("form");
+      if (form) {
+        form.addEventListener("submit", function (e) {
+          if (!document.getElementById("vehicleBrand").value || !document.getElementById("vehicleModel").value) {
+            e.preventDefault();
+            alert("차량을 선택해주세요.");
+          }
+        });
+      }
+
+      var toggle = document.getElementById("toggle-password");
+      var password = document.getElementById("password");
+      toggle.addEventListener("click", function () {
+        var hidden = password.type === "password";
+        password.type = hidden ? "text" : "password";
+        toggle.setAttribute("aria-label", hidden ? "Hide password" : "Show password");
+        toggle.innerHTML = hidden
+          ? '<i data-lucide="eye-off" class="h-4 w-4"></i>'
+          : '<i data-lucide="eye" class="h-4 w-4"></i>';
+        if (window.lucide) lucide.createIcons();
+      });
+    });
+  </script>
+</body>
+</html>
