@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 
 import com.evcharge.reservation.ev.domain.User;
 import com.evcharge.reservation.ev.repository.UserRepository;
+import com.evcharge.reservation.ev.security.LoginUser;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,10 +22,6 @@ public class CustomUserDetailsService implements UserDetailsService {
 		User user = userRepository.findByEmail(username)
 				.orElseThrow(() -> new UsernameNotFoundException("사용자를 찾을 수 없습니다: " + username));
 
-		return org.springframework.security.core.userdetails.User.builder()
-				.username(user.getEmail())
-				.password(user.getPassword())
-				.roles("USER")
-				.build();
+		return new LoginUser(user.getId(), user.getEmail(), user.getPassword());
 	}
 }

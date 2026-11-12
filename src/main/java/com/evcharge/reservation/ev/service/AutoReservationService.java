@@ -22,6 +22,7 @@ import com.evcharge.reservation.ev.domain.ReservationType;
 import com.evcharge.reservation.ev.domain.User;
 import com.evcharge.reservation.ev.domain.Vehicle;
 import com.evcharge.reservation.ev.domain.VehicleConnectorMapping;
+import com.evcharge.reservation.ev.exception.ConflictException;
 import com.evcharge.reservation.ev.dto.AutoReservationRequest;
 import com.evcharge.reservation.ev.dto.ReservationResponse;
 import com.evcharge.reservation.ev.external.KakaoMobilityService;
@@ -62,8 +63,7 @@ public class AutoReservationService {
 	 * 409면 다음 후보로 폴백한다.
 	 */
 	@Transactional(propagation = Propagation.NOT_SUPPORTED)
-	public ReservationResponse autoReserve(AutoReservationRequest request) {
-		Long userId = request.userId();
+	public ReservationResponse autoReserve(Long userId, AutoReservationRequest request) {
 		double lat = request.lat();
 		double lng = request.lng();
 
@@ -82,7 +82,7 @@ public class AutoReservationService {
 		String speedFilter = hardSpeedFilter ? normalize(request.speed()) : "ALL";
 		String speedPrefer = hardSpeedFilter ? "ALL" : normalizeSpeedPrefer(saved.speedPriority());
 
-		User user = userRepository.findById(userId)
+		User user = userRepository.findWithVehicleById(userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "유저를 찾을 수 없습니다."));
 		Vehicle vehicle = user.getVehicle();
 		if (vehicle == null || vehicle.getBrand() == null || vehicle.getModel() == null) {
@@ -177,6 +177,11 @@ public class AutoReservationService {
 				);
 				lockMetrics.recordAutoOutcome(hadConflict ? "retry_success" : "first_success");
 				return reserved;
+			} catch (ConflictException ex) {
+				hadConflict = true;
+				lockMetrics.recordAutoConflictAttempt();
+				lastConflict = new ResponseStatusException(HttpStatus.CONFLICT, ex.getMessage());
+				continue;
 			} catch (ResponseStatusException ex) {
 				// 이미 선점된 충전기면 다음 후보로 폴백
 				if (ex.getStatusCode() == HttpStatus.CONFLICT) {

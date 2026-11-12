@@ -20,10 +20,12 @@ import com.evcharge.reservation.ev.domain.ChargerStatus;
 import com.evcharge.reservation.ev.domain.ChargerType;
 import com.evcharge.reservation.ev.domain.ChargerTypeMapper;
 import com.evcharge.reservation.ev.domain.ChargingStation;
+import com.evcharge.reservation.ev.domain.ReservationStatus;
 import com.evcharge.reservation.ev.exception.TooManyRequestsException;
 import com.evcharge.reservation.ev.external.PublicChargingStationApiClient;
 import com.evcharge.reservation.ev.repository.ChargerRepository;
 import com.evcharge.reservation.ev.repository.ChargingStationRepository;
+import com.evcharge.reservation.ev.repository.ReservationRepository;
 import com.evcharge.reservation.ev.util.GeoUtils;
 import tools.jackson.databind.JsonNode;
 
@@ -36,10 +38,12 @@ public class ChargingStationSyncService {
 	private static final DateTimeFormatter API_DT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 	private static final long MANUAL_COOLDOWN_MS = 30_000L;
 	private static final double DEFAULT_REFRESH_RADIUS_KM = 3.0;
+	private static final double MAX_REFRESH_RADIUS_KM = 5.0;
 
 	private final PublicChargingStationApiClient apiClient;
 	private final ChargingStationRepository chargingStationRepository;
 	private final ChargerRepository chargerRepository;
+	private final ReservationRepository reservationRepository;
 	private final TransactionTemplate transactionTemplate;
 
 	/** 위치 기반 수동 새로고침 쿨다운 (lat/lng 소수점 3자리 ≈ 100m 격자) */
@@ -49,11 +53,13 @@ public class ChargingStationSyncService {
 			PublicChargingStationApiClient apiClient,
 			ChargingStationRepository chargingStationRepository,
 			ChargerRepository chargerRepository,
+			ReservationRepository reservationRepository,
 			PlatformTransactionManager transactionManager
 	) {
 		this.apiClient = apiClient;
 		this.chargingStationRepository = chargingStationRepository;
 		this.chargerRepository = chargerRepository;
+		this.reservationRepository = reservationRepository;
 		this.transactionTemplate = new TransactionTemplate(transactionManager);
 	}
 
@@ -76,9 +82,12 @@ public class ChargingStationSyncService {
 	 * 반경 내 충전소만 공공 API(statId)로 상태 갱신. 수동 새로고침용.
 	 */
 	public synchronized int syncByRadius(double lat, double lng, Double radiusKm) {
-		double radius = radiusKm == null || radiusKm <= 0 ? DEFAULT_REFRESH_RADIUS_KM : radiusKm;
+		double radius = radiusKm == null || radiusKm <= 0
+				? DEFAULT_REFRESH_RADIUS_KM
+				: Math.min(radiusKm, MAX_REFRESH_RADIUS_KM);
 		String cooldownKey = locationCooldownKey(lat, lng, radius);
 		long now = System.currentTimeMillis();
+		lastManualSyncByLocation.values().removeIf(at -> now - at >= MANUAL_COOLDOWN_MS);
 		Long previous = lastManualSyncByLocation.get(cooldownKey);
 		if (previous != null && now - previous < MANUAL_COOLDOWN_MS) {
 			throw new TooManyRequestsException("해당 위치 수동 새로고침은 30초 간격으로만 가능합니다.");
@@ -269,7 +278,8 @@ public class ChargingStationSyncService {
 			ChargerStatus status = ChargerTypeMapper.fromStatCode(resolvedStatCode);
 
 			final ChargingStation savedStation = station;
-			Charger charger = chargerRepository.findByStationIdAndChgerId(savedStation.getId(), chgerId)
+			// reserveCharger와 같은 행 락을 잡아야 PENDING 확인 후 저장 사이에 예약이 끼어들지 못한다.
+			Charger charger = chargerRepository.findByStationIdAndChgerIdForUpdate(savedStation.getId(), chgerId)
 					.orElseGet(() -> Charger.builder()
 							.station(savedStation)
 							.chgerId(chgerId)
@@ -279,6 +289,11 @@ public class ChargingStationSyncService {
 							.statCode(resolvedStatCode)
 							.delYn("N")
 							.build());
+
+			// 우리 앱에 PENDING 예약이 있으면 점유(status/statCode)는 공공값으로 덮지 않는다.
+			boolean preserveLocalOccupancy = charger.getId() != null
+					&& reservationRepository.existsByCharger_IdAndStatus(
+							charger.getId(), ReservationStatus.PENDING);
 
 			charger.applyApiSync(
 					chargerType,
@@ -292,7 +307,8 @@ public class ChargingStationSyncService {
 					asDateTime(item, "lastTedt"),
 					asDateTime(item, "nowTsdt"),
 					textOrDefault(item, "delYn", "N"),
-					syncedAt
+					syncedAt,
+					preserveLocalOccupancy
 			);
 			chargerRepository.save(charger);
 		}

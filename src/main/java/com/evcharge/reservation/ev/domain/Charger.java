@@ -80,6 +80,9 @@ public class Charger {
 	@Column(name = "last_synced_at")
 	private LocalDateTime lastSyncedAt;
 
+	/**
+	 * @param preserveLocalOccupancy true면 우리 앱 점유(status/statCode)는 공공값으로 덮지 않음
+	 */
 	public void applyApiSync(
 			ChargerType chargerType,
 			String apiChgerTypeCode,
@@ -92,14 +95,17 @@ public class Charger {
 			LocalDateTime lastTedt,
 			LocalDateTime nowTsdt,
 			String delYn,
-			LocalDateTime lastSyncedAt
+			LocalDateTime lastSyncedAt,
+			boolean preserveLocalOccupancy
 	) {
 		this.chargerType = chargerType;
 		this.apiChgerTypeCode = apiChgerTypeCode;
 		this.output = output;
 		this.method = method;
-		this.status = status;
-		this.statCode = statCode;
+		if (!preserveLocalOccupancy) {
+			this.status = status;
+			this.statCode = statCode;
+		}
 		this.statUpdDt = statUpdDt;
 		this.lastTsdt = lastTsdt;
 		this.lastTedt = lastTedt;
@@ -108,7 +114,12 @@ public class Charger {
 		this.lastSyncedAt = lastSyncedAt;
 	}
 
+	/**
+	 * 예약/해제 시 도메인 status와 공공 호환 statCode를 함께 맞춘다.
+	 * (지도 nearby 집계와 예약 점유가 같은 기준을 쓰도록)
+	 */
 	public void markStatus(ChargerStatus status) {
 		this.status = status;
+		this.statCode = ChargerTypeMapper.toStatCode(status);
 	}
 }

@@ -20,13 +20,18 @@ public class RedissonLockStrategy implements ChargerLockStrategy {
 	private final RedissonClient redissonClient;
 	private final LockMetrics lockMetrics;
 
+	/**
+	 * wait만 지정(lease 미지정) → Redisson watchdog이 락을 TX 종료까지 연장.
+	 * 예전 tryLock(3, 5)는 lease 5초 고정·watchdog 비활성으로, TX > 5s 이면
+	 * afterCompletion 이전에 Redis 락이 만료될 수 있어 상호배제가 깨질 수 있었다.
+	 */
 	@Override
 	public <T> T executeWithLock(Long chargerId, Supplier<T> action) {
 		RLock lock = redissonClient.getLock("charger-lock:" + chargerId);
 		boolean acquired;
 		long waitStart = System.nanoTime();
 		try {
-			acquired = lock.tryLock(3, 5, TimeUnit.SECONDS);
+			acquired = lock.tryLock(3, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
 			lockMetrics.recordLockWait("redisson", false, System.nanoTime() - waitStart);
 			Thread.currentThread().interrupt();
@@ -67,7 +72,7 @@ public class RedissonLockStrategy implements ChargerLockStrategy {
 				lock.unlock();
 			}
 		} catch (Exception ignored) {
-			// lease 만료 등으로 unlock 실패해도 예약 TX 결과는 유지
+			// unlock 실패해도 예약 TX 결과는 유지 (DB FOR UPDATE가 최종 방어)
 		}
 	}
 }

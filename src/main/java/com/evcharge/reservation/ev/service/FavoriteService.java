@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -71,7 +72,11 @@ public class FavoriteService {
 		favoriteRepository.delete(favorite);
 	}
 
-	@Transactional
+	/**
+	 * 바깥 TX 없이 조회하고, 점유는 reserveCharger(REQUIRES_NEW)에서만 연다.
+	 * 바깥 TX가 있으면 요청 하나가 커넥션 두 개를 잡아 동시 요청 시 풀이 고갈될 수 있다.
+	 */
+	@Transactional(propagation = Propagation.NOT_SUPPORTED)
 	public ReservationResponse reserveFromFavorite(Long stationId, Long userId) {
 		if (!favoriteRepository.existsByUserIdAndStationId(userId, stationId)) {
 			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "즐겨찾기 충전소가 아닙니다.");

@@ -18,7 +18,12 @@ public interface ChargerRepository extends JpaRepository<Charger, Long> {
 
 	List<Charger> findByStationId(Long stationId);
 
-	Optional<Charger> findByStationIdAndChgerId(Long stationId, String chgerId);
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("SELECT c FROM Charger c WHERE c.station.id = :stationId AND c.chgerId = :chgerId")
+	Optional<Charger> findByStationIdAndChgerIdForUpdate(
+			@Param("stationId") Long stationId,
+			@Param("chgerId") String chgerId
+	);
 
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("SELECT c FROM Charger c JOIN FETCH c.station WHERE c.id = :id")

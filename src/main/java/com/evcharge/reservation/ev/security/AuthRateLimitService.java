@@ -24,6 +24,10 @@ public class AuthRateLimitService {
 	static final int MAX_SIGNUPS_PER_IP = 5;
 	static final Duration SIGNUP_WINDOW = Duration.ofHours(1);
 
+	/** 공공 API 수동 새로고침: 좌표를 바꿔 위치별 쿨다운을 우회하지 못하도록 사용자 단위로도 제한 */
+	static final int MAX_REFRESHES_PER_USER = 5;
+	static final Duration REFRESH_WINDOW = Duration.ofMinutes(1);
+
 	private final RedissonClient redissonClient;
 
 	public boolean isLoginBlocked(String username, String ip) {
@@ -71,11 +75,21 @@ public class AuthRateLimitService {
 		return count <= MAX_SIGNUPS_PER_IP;
 	}
 
-	public static String clientIp(HttpServletRequest request) {
-		String forwarded = request.getHeader("X-Forwarded-For");
-		if (StringUtils.hasText(forwarded)) {
-			return forwarded.split(",")[0].trim();
+	/**
+	 * @return true if refresh is allowed, false if the user exceeded the per-minute limit
+	 */
+	public boolean tryConsumeRefresh(Long userId) {
+		if (userId == null) {
+			return false;
 		}
+		return increment("api:refresh:user:" + userId, REFRESH_WINDOW) <= MAX_REFRESHES_PER_USER;
+	}
+
+	/**
+	 * X-Forwarded-For는 클라이언트가 위조할 수 있어 직접 읽지 않는다.
+	 * 프록시 뒤 배포 시 server.forward-headers-strategy=native 가 신뢰 프록시의 헤더만 반영한다.
+	 */
+	public static String clientIp(HttpServletRequest request) {
 		return request.getRemoteAddr();
 	}
 

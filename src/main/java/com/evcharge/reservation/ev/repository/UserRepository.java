@@ -19,5 +19,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
 			""")
 	Optional<User> findByEmailWithVehicle(@Param("email") String email);
 
+	@Query("""
+			SELECT u FROM User u
+			LEFT JOIN FETCH u.vehicle
+			WHERE u.id = :id
+			""")
+	Optional<User> findWithVehicleById(@Param("id") Long id);
+
 	boolean existsByEmail(String email);
 }

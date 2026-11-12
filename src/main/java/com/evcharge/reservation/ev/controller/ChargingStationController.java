@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,6 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 import com.evcharge.reservation.ev.dto.ChargingStationResponse;
 import com.evcharge.reservation.ev.dto.StationDetailResponse;
 import com.evcharge.reservation.ev.dto.StationMapResponse;
+import com.evcharge.reservation.ev.exception.TooManyRequestsException;
+import com.evcharge.reservation.ev.security.AuthRateLimitService;
+import com.evcharge.reservation.ev.security.LoginUser;
 import com.evcharge.reservation.ev.service.ChargingStationService;
 import com.evcharge.reservation.ev.service.ChargingStationSyncService;
 import com.evcharge.reservation.ev.service.StationMapQueryService;
@@ -28,11 +32,7 @@ public class ChargingStationController {
 	private final ChargingStationService chargingStationService;
 	private final ChargingStationSyncService chargingStationSyncService;
 	private final StationMapQueryService stationMapQueryService;
-
-	@GetMapping
-	public List<ChargingStationResponse> findAll() {
-		return chargingStationService.findAll();
-	}
+	private final AuthRateLimitService authRateLimitService;
 
 	@GetMapping("/nearby")
 	public List<StationMapResponse> nearby(
@@ -50,18 +50,13 @@ public class ChargingStationController {
 	public ResponseEntity<Map<String, String>> refresh(
 			@RequestParam(value = "lat", required = false, defaultValue = "37.566826") String lat,
 			@RequestParam(value = "lng", required = false, defaultValue = "126.9786567") String lng,
-			@RequestParam(value = "radius", required = false, defaultValue = "3") String radius
+			@RequestParam(value = "radius", required = false, defaultValue = "3") String radius,
+			@AuthenticationPrincipal LoginUser loginUser
 	) {
-		return doRefresh(lat, lng, radius);
-	}
-
-	/** 임시 디버깅/적재용 — CSRF 우회 테스트 */
-	@GetMapping("/refresh")
-	public ResponseEntity<Map<String, String>> refreshStationsGet(
-			@RequestParam(value = "lat", required = false, defaultValue = "37.566826") String lat,
-			@RequestParam(value = "lng", required = false, defaultValue = "126.9786567") String lng,
-			@RequestParam(value = "radius", required = false, defaultValue = "3") String radius
-	) {
+		Long userId = ReservationApiSupport.resolveUserId(loginUser, null);
+		if (!authRateLimitService.tryConsumeRefresh(userId)) {
+			throw new TooManyRequestsException("새로고침 요청이 너무 많습니다. 잠시 후 다시 시도해주세요.");
+		}
 		return doRefresh(lat, lng, radius);
 	}
 
@@ -91,9 +86,9 @@ public class ChargingStationController {
 	@GetMapping("/{stationId}/detail")
 	public StationDetailResponse stationDetail(
 			@PathVariable Long stationId,
-			@RequestParam(required = false) Long userId
+			@AuthenticationPrincipal LoginUser loginUser
 	) {
-		return chargingStationService.getStationDetail(stationId, userId);
+		return chargingStationService.getStationDetail(stationId, loginUser == null ? null : loginUser.getId());
 	}
 
 	@GetMapping("/{id}")

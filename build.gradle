@@ -27,6 +27,8 @@ dependencies {
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'org.redisson:redisson-spring-boot-starter:4.4.0'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+	implementation 'net.javacrumbs.shedlock:shedlock-spring:6.3.1'
+	implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:6.3.1'
 	// 로컬 bootRun 시 프로젝트 루트 .env → Spring Environment 자동 로드 (프로덕션 classpath 제외)
 	developmentOnly 'me.paulschwarz:springboot4-dotenv:5.1.0'
 
