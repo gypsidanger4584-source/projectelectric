@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>자동예약 요청 시퀀스</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default" });
+  </script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; background: #f7f7f7; }
+    h1 { font-size: 1.1rem; margin-bottom: 16px; }
+    .box { background: #fff; padding: 24px; border-radius: 8px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>자동예약 요청 시퀀스 (처리 흐름)</h1>
+  <p>브라우저에서 연 뒤 → 다이어그램 우클릭 → 이미지로 저장 / 또는 전체 화면 캡처</p>
+  <div class="box">
+    <pre class="mermaid">
+sequenceDiagram
+  participant UI as 브라우저
+  participant Sec as Security
+  participant C as AutoReservationController
+  participant A as AutoReservationService
+  participant Kakao as KakaoMobility
+  participant R as ReservationService
+  participant Lock as LockStrategy
+  participant DB as Postgres
+
+  UI->>Sec: POST /api/reservations/auto
+  Sec->>C: 세션 OK
+  C->>A: autoReserve(request)
+  Note over A: TX 없음 (NOT_SUPPORTED)
+  A->>DB: 유저·설정·후보 충전기
+  A->>Kakao: 후보 거리/시간 (또는 skip)
+  loop 후보 순서대로
+    A->>R: reserveCharger(REQUIRES_NEW)
+    R->>Lock: executeWithLock
+    Lock->>DB: FOR UPDATE + PENDING 생성
+    alt 성공
+      R-->>A: ReservationResponse
+      A-->>UI: 201
+    else 409 CONFLICT
+      A->>A: 다음 후보
+    end
+  end
+    </pre>
+  </div>
+</body>
+</html>

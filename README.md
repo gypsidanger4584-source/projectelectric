@@ -147,7 +147,9 @@ k6 → Prometheus (권장):
 .\loadtest\run-with-grafana.ps1 -Strategy REDISSON -Script auto-reserve-50slots.js -MaxKm 1
 ```
 
-로컬 전용으로 `/actuator/prometheus`, `/api/admin/lock-strategy` 는 인증 없이 열려 있습니다. **배포 시 반드시 막으세요.**
+로컬 전용으로 `/actuator/prometheus` 는 인증 없이 열려 있습니다. **배포 시 반드시 막으세요.**
+`/api/admin/lock-strategy` 는 기본 비활성(404)입니다. 데모·부하 테스트 때만 환경변수 `APP_ADMIN_LOCK_STRATEGY_TOGGLE=true` 로 켜세요(켜면 로그인한 누구나 전역 락 전략을 바꿀 수 있음).
+`POST /api/stations/refresh` 는 로그인 필수이며 사용자당 분당 5회로 제한됩니다.
 
 ---
 
