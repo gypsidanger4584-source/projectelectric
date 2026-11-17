@@ -3,6 +3,7 @@ package com.evcharge.reservation.ev.config;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -42,7 +43,7 @@ public class SecurityConfig {
 			RedisLoginSuccessHandler loginSuccessHandler
 	) throws Exception {
 		http
-				.csrf(csrf -> csrf.ignoringRequestMatchers("/api/stations/**", "/api/**"))
+				.csrf(csrf -> csrf.ignoringRequestMatchers("/api/**"))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(
 								"/",
@@ -53,11 +54,11 @@ public class SecurityConfig {
 								"/css/**",
 								"/js/**",
 								"/images/**",
-								"/static/**"
+								"/static/**",
+								"/error"
 						).permitAll()
-						.requestMatchers("/api/stations/**").permitAll()
-						// 로컬 부하 테스트에서 락 전략 토글 (인증 없이 전환)
-						.requestMatchers("/api/admin/lock-strategy").permitAll()
+						.requestMatchers(HttpMethod.GET, "/api/stations/**").permitAll()
+						// /api/stations/refresh(POST)는 공공 API 쿼터를 쓰므로 로그인 필수 (anyRequest 규칙)
 						// 로컬 Prometheus scrape용 (배포 환경에서는 방화벽/게이트웨이로 제한)
 						.requestMatchers(
 								"/actuator/health",

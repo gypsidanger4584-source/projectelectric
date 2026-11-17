@@ -1656,6 +1656,10 @@
         credentials: "same-origin"
       })
         .then(function (res) {
+          if (res.redirected && /\/login/.test(res.url)) {
+            showToast("로그인 후 새로고침할 수 있습니다");
+            return null;
+          }
           if (res.status === 429) {
             showToast("잠시 후 다시 시도해주세요");
             return null;
@@ -1772,6 +1776,8 @@
             })
             .catch(function (err) {
               console.error(err);
+              // 서버에서 전환 API가 꺼져 있으면(기본값) 토글 버튼을 숨긴다
+              btn.style.display = "none";
               applyStrategy("PESSIMISTIC");
             });
         }

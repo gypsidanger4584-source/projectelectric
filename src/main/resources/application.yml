@@ -1,4 +1,6 @@
 server:
+  # 신뢰 프록시(내부망 IP)가 보낸 X-Forwarded-For만 remoteAddr에 반영
+  forward-headers-strategy: native
   servlet:
     session:
       cookie:
@@ -24,6 +26,8 @@ spring:
       host: localhost
       port: 6379
   jpa:
+    # 켜 두면 TX 밖 조회가 요청 끝까지 커넥션을 잡고, REQUIRES_NEW도 같은 영속성 컨텍스트를 재사용할 수 있다
+    open-in-view: false
     hibernate:
       ddl-auto: update
     defer-datasource-initialization: true
@@ -70,6 +74,11 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+# 락 전략 전환 API(/api/admin/lock-strategy): 데모·부하 테스트 때만 true (기본 꺼짐, 켜면 로그인한 누구나 변경 가능)
+app:
+  admin:
+    lock-strategy-toggle: ${APP_ADMIN_LOCK_STRATEGY_TOGGLE:false}
 
 # 부하 테스트 시 Kakao 동시 호출 병목 회피 (락/폴백 로직은 동일, 순위만 직선거리)
 loadtest:

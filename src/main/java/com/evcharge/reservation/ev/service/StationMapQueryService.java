@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.evcharge.reservation.ev.domain.Charger;
+import com.evcharge.reservation.ev.domain.ChargerStatus;
 import com.evcharge.reservation.ev.domain.ChargingStation;
 import com.evcharge.reservation.ev.domain.VehicleConnectorMapping;
 import com.evcharge.reservation.ev.dto.StationMapResponse;
@@ -27,6 +28,7 @@ import lombok.RequiredArgsConstructor;
 public class StationMapQueryService {
 
 	private static final double DEFAULT_RADIUS_KM = 3.0;
+	private static final double MAX_RADIUS_KM = 5.0;
 
 	private final ChargingStationRepository chargingStationRepository;
 	private final ChargerRepository chargerRepository;
@@ -44,7 +46,7 @@ public class StationMapQueryService {
 			throw new IllegalArgumentException("vehicleBrand와 vehicleModel은 필수입니다.");
 		}
 
-		double radius = radiusKm == null || radiusKm <= 0 ? DEFAULT_RADIUS_KM : radiusKm;
+		double radius = radiusKm == null || radiusKm <= 0 ? DEFAULT_RADIUS_KM : Math.min(radiusKm, MAX_RADIUS_KM);
 		Set<String> supportedCodes = vehicleConnectorMappingRepository
 				.findByBrandAndModel(vehicleBrand.trim(), vehicleModel.trim())
 				.stream()
@@ -92,7 +94,7 @@ public class StationMapQueryService {
 			int fastAvailable = 0;
 			int slowAvailable = 0;
 			for (Charger charger : chargers) {
-				if (charger.getStatCode() == null || charger.getStatCode() != 2) {
+				if (charger.getStatus() != ChargerStatus.AVAILABLE) {
 					continue;
 				}
 				Integer output = charger.getOutput();

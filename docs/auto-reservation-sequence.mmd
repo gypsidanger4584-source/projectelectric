@@ -1,0 +1,27 @@
+sequenceDiagram
+  participant UI as 브라우저
+  participant Sec as Security
+  participant C as AutoReservationController
+  participant A as AutoReservationService
+  participant Kakao as KakaoMobility
+  participant R as ReservationService
+  participant Lock as LockStrategy
+  participant DB as Postgres
+
+  UI->>Sec: POST /api/reservations/auto
+  Sec->>C: 세션 OK
+  C->>A: autoReserve(request)
+  Note over A: TX 없음 (NOT_SUPPORTED)
+  A->>DB: 유저·설정·후보 충전기
+  A->>Kakao: 후보 거리/시간 (또는 skip)
+  loop 후보 순서대로
+    A->>R: reserveCharger(REQUIRES_NEW)
+    R->>Lock: executeWithLock
+    Lock->>DB: FOR UPDATE + PENDING 생성
+    alt 성공
+      R-->>A: ReservationResponse
+      A-->>UI: 201
+    else 409 CONFLICT
+      A->>A: 다음 후보
+    end
+  end

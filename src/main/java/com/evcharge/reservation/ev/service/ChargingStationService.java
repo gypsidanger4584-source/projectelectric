@@ -33,12 +33,6 @@ public class ChargingStationService {
 	private final ChargerRepository chargerRepository;
 	private final ReservationRepository reservationRepository;
 
-	public List<ChargingStationResponse> findAll() {
-		return chargingStationRepository.findAll().stream()
-				.map(ChargingStationResponse::from)
-				.toList();
-	}
-
 	public ChargingStationResponse findById(Long id) {
 		return chargingStationRepository.findById(id)
 				.map(ChargingStationResponse::from)

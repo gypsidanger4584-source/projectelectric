@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -17,9 +18,10 @@ import com.evcharge.reservation.ev.domain.ReservationHoldPolicy;
 import com.evcharge.reservation.ev.domain.ReservationStatus;
 import com.evcharge.reservation.ev.domain.ReservationType;
 import com.evcharge.reservation.ev.domain.User;
-import com.evcharge.reservation.ev.dto.ReservationCreateRequest;
 import com.evcharge.reservation.ev.dto.ReservationExpiryAlert;
 import com.evcharge.reservation.ev.dto.ReservationResponse;
+import com.evcharge.reservation.ev.exception.ConflictException;
+import com.evcharge.reservation.ev.exception.PendingChargerUnique;
 import com.evcharge.reservation.ev.lock.LockMetrics;
 import com.evcharge.reservation.ev.lock.LockStrategyResolver;
 import com.evcharge.reservation.ev.repository.ChargerRepository;
@@ -35,32 +37,13 @@ import lombok.extern.slf4j.Slf4j;
 @Transactional(readOnly = true)
 public class ReservationService {
 
+	private static final String CANCEL_NOT_ALLOWED_MESSAGE = "취소할 수 없는 예약 상태입니다.";
+
 	private final ReservationRepository reservationRepository;
 	private final UserRepository userRepository;
 	private final ChargerRepository chargerRepository;
 	private final LockStrategyResolver lockStrategyResolver;
 	private final LockMetrics lockMetrics;
-
-	@Transactional
-	public ReservationResponse create(ReservationCreateRequest request) {
-		User user = userRepository.findById(request.userId())
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "유저를 찾을 수 없습니다."));
-		Charger charger = chargerRepository.findById(request.chargerId())
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "충전기를 찾을 수 없습니다."));
-
-		Reservation reservation = Reservation.builder()
-				.user(user)
-				.charger(charger)
-				.startTime(request.startTime())
-				.endTime(request.endTime())
-				.status(ReservationStatus.PENDING)
-				.type(ReservationType.MANUAL)
-				.holdExpiresAt(request.endTime())
-				.expiryNotified(false)
-				.build();
-
-		return ReservationResponse.from(reservationRepository.save(reservation));
-	}
 
 	/**
 	 * 런타임 락 전략(비관적 / Redisson)으로 충전기 점유 후 PENDING 예약 생성.
@@ -118,13 +101,22 @@ public class ReservationService {
 
 					charger.markStatus(ChargerStatus.RESERVED);
 					chargerRepository.save(charger);
-					return ReservationResponse.from(reservationRepository.save(reservation));
+					try {
+						return ReservationResponse.from(reservationRepository.save(reservation));
+					} catch (DataIntegrityViolationException ex) {
+						if (PendingChargerUnique.isViolation(ex)) {
+							throw new ConflictException("이미 예약되었습니다");
+						}
+						throw ex;
+					}
 				})
 		);
 	}
 
-	public ReservationResponse findById(Long id) {
-		return ReservationResponse.from(findReservation(id));
+	public ReservationResponse findByIdAndUserId(Long id, Long userId) {
+		return reservationRepository.findByIdAndUserId(id, userId)
+				.map(ReservationResponse::from)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다."));
 	}
 
 	public List<ReservationResponse> findByUserId(Long userId) {
@@ -144,15 +136,33 @@ public class ReservationService {
 		Reservation reservation = reservationRepository.findByIdAndUserId(id, userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다."));
 		if (reservation.getStatus() != ReservationStatus.PENDING) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "취소할 수 없는 예약 상태입니다.");
+			throw new ConflictException(CANCEL_NOT_ALLOWED_MESSAGE);
 		}
-		reservation.cancel();
-		releaseChargerIfReserved(reservation.getCharger());
-		return ReservationResponse.from(reservation);
+		Long chargerId = reservation.getCharger().getId();
+
+		// 읽은 PENDING이 쓸 때도 참이라는 보장이 없으므로, 만료와 같은 조건부 UPDATE로 이길 쪽을 DB가 정한다.
+		int updated = reservationRepository.cancelIfPending(
+				id,
+				userId,
+				ReservationStatus.CANCELLED,
+				ReservationStatus.PENDING
+		);
+		if (updated == 0) {
+			throw new ConflictException(CANCEL_NOT_ALLOWED_MESSAGE);
+		}
+
+		// 1행 = 이 예약이 PENDING이었다는 증거(충전기당 PENDING은 partial unique로 1건)이므로 충전기 반환이 안전하다.
+		// 만료 경로와 같은 순서(예약 행 → 충전기 행)로 락을 잡는다.
+		chargerRepository.findByIdForUpdate(chargerId).ifPresent(this::releaseChargerIfReserved);
+
+		// clearAutomatically로 컨텍스트가 비워졌으므로 갱신된 상태를 다시 읽어 응답한다.
+		return reservationRepository.findByIdAndUserId(id, userId)
+				.map(ReservationResponse::from)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다."));
 	}
 
 	/**
-	 * holdExpiresAt이 지난 PENDING 예약을 EXPIRED로 바꾸고 충전기를 반환한다.
+	 * holdExpiresAt이 지난 PENDING을 조건부 UPDATE로 EXPIRED. 1행일 때만 충전기 반환.
 	 */
 	@Transactional
 	public int expireOverdueReservations() {
@@ -162,10 +172,20 @@ public class ReservationService {
 		);
 		int count = 0;
 		for (Reservation reservation : overdue) {
-			reservation.expire();
-			releaseChargerIfReserved(reservation.getCharger());
+			Long reservationId = reservation.getId();
+			Long chargerId = reservation.getCharger().getId();
+			Long userId = reservation.getUser().getId();
+			int updated = reservationRepository.expireIfPending(
+					reservationId,
+					ReservationStatus.EXPIRED,
+					ReservationStatus.PENDING
+			);
+			if (updated == 0) {
+				continue;
+			}
+			chargerRepository.findByIdForUpdate(chargerId).ifPresent(this::releaseChargerIfReserved);
 			count++;
-			log.info("Reservation {} expired for user {}", reservation.getId(), reservation.getUser().getId());
+			log.info("Reservation {} expired for user {}", reservationId, userId);
 		}
 		return count;
 	}
@@ -206,8 +226,4 @@ public class ReservationService {
 		}
 	}
 
-	private Reservation findReservation(Long id) {
-		return reservationRepository.findById(id)
-				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "예약을 찾을 수 없습니다."));
-	}
 }
