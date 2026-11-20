@@ -12,10 +12,11 @@
 4. [실행 방법](#실행-방법)
 5. [폴더 안내](#폴더-안내)
 6. [동시성 · 락](#동시성--락)
-7. [부하 테스트 결과 요약](#부하-테스트-결과-요약)
-8. [모니터링](#모니터링-prometheus--grafana)
-9. [부하 테스트 실행](#부하-테스트-실행)
-10. [CI](#ci)
+7. [동시성 통합 테스트](#동시성-통합-테스트)
+8. [부하 테스트 결과 요약](#부하-테스트-결과-요약)
+9. [모니터링](#모니터링-prometheus--grafana)
+10. [부하 테스트 실행](#부하-테스트-실행)
+11. [CI](#ci)
 
 ## 스택
 
@@ -117,6 +118,23 @@ compose의 모든 포트는 `127.0.0.1`에만 열립니다.
 | 취소 | 만료와 같은 조건부 UPDATE로 처리해 서로 덮어쓰지 않게 함 |
 | 락 전략 | 기본값은 `PESSIMISTIC`. `POST /api/admin/lock-strategy`로 `REDISSON`과 전환하며, `APP_ADMIN_LOCK_STRATEGY_TOGGLE=true`일 때만 열림 |
 
+## 동시성 통합 테스트
+
+`ReservationConcurrencyIntegrationTest`가 실제 PostgreSQL과 Redis 위에서 아래를 검증합니다. CI에서는 서비스 컨테이너를, 로컬에서는 `docker compose up -d postgres redis`로 띄운 컨테이너를 씁니다.
+
+| 검증 | 내용 |
+|------|------|
+| 동시 예약 | 같은 충전기에 20명이 동시에 예약하면 PESSIMISTIC, REDISSON 모두 1건만 성공하고 나머지는 409. DB의 PENDING도 1건 |
+| partial unique | 같은 충전기에 PENDING을 하나 더 넣으면 DB가 거절. 이전 예약이 EXPIRED면 새 PENDING은 허용 |
+| 취소 vs 만료 | 만료가 먼저 이기면 취소는 409이고 EXPIRED가 유지됨. 취소가 먼저 이기면 만료 UPDATE는 0건 |
+
+```powershell
+docker compose up -d postgres redis
+.\gradlew.bat test --tests "*ReservationConcurrencyIntegrationTest"
+```
+
+취소와 만료가 정확히 같은 순간에 부딪히는 경합을 반복 실행으로 재현하지는 않았습니다. 위 테스트는 어느 쪽이 먼저 이겼을 때의 결과를 DB 위에서 고정해 둔 것입니다.
+
 ## 부하 테스트 결과 요약
 
 k6로 자동예약 API에 동시 요청을 보냈습니다. 상세 조건과 수치는 [보고서](docs/loadtest-report.md)에 있습니다.
@@ -131,6 +149,8 @@ k6로 자동예약 API에 동시 요청을 보냈습니다. 상세 조건과 수
 | 정합성 수정 | 락 후 재조회, 커밋 뒤 unlock, partial unique. 성공 1건, 나머지 409 | 1 |
 | 폴백 추가 | 409가 나면 다음 후보 시도. 바깥 TX를 정리하기 전에는 Hikari 풀 고갈로 전부 실패 | 1 |
 | 50자리 x 50유저 | ok 49, 마지막 성공까지 5.7초 | 1 |
+
+수정 전 측정은 충전소 5곳으로 한정한 조건(VU 50)이고, 이후 단계는 조건이 달라서 단계 간 수치를 같은 조건의 비교로 읽으면 안 됩니다.
 
 같은 조건(VU 50, 충전기 50기, 단일 인스턴스)에서 락 전략만 바꿔 비교한 결과입니다.
 

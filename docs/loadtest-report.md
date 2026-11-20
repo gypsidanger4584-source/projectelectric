@@ -83,7 +83,7 @@ API는 201을 반환했지만 충전기 1기에 PENDING 1건이라는 규칙이 
 | 상태 재조회 | 락 후 `findByIdForUpdate`로 fresh 읽기 |
 | 가드 강화 | 동일 충전기 `PENDING` 존재 시 409 |
 | `RedissonLockStrategy` | unlock을 `TransactionSynchronization.afterCompletion`으로 커밋/롤백 이후 |
-| DB | `UNIQUE (charger_id) WHERE status = 'PENDING'` (`uq_reservations_charger_pending`) |
+| DB | `UNIQUE (charger_id) WHERE status = 'PENDING'` (`uk_charger_one_pending`, `schema.sql`로 생성) |
 | Hikari / Postgres | 풀·`max_connections` 상향 (동시 FOR UPDATE 대기 대비) |
 
 ### 4.2 UX·처리량 (409 폴백)
