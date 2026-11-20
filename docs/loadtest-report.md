@@ -83,7 +83,7 @@ API는 201을 반환했지만 충전기 1기에 PENDING 1건이라는 규칙이 
 | 상태 재조회 | 락 후 `findByIdForUpdate`로 fresh 읽기 |
 | 가드 강화 | 동일 충전기 `PENDING` 존재 시 409 |
 | `RedissonLockStrategy` | unlock을 `TransactionSynchronization.afterCompletion`으로 커밋/롤백 이후 |
-| DB | `UNIQUE (charger_id) WHERE status = 'PENDING'` (`uq_reservations_charger_pending`) |
+| DB | `UNIQUE (charger_id) WHERE status = 'PENDING'` (`uk_charger_one_pending`, `schema.sql`로 생성) |
 | Hikari / Postgres | 풀·`max_connections` 상향 (동시 FOR UPDATE 대기 대비) |
 
 ### 4.2 UX·처리량 (409 폴백)
@@ -293,7 +293,7 @@ Postgres / Redis · JVM CPU
 - 동일 조건에서 완료 지연은 PESSIMISTIC이 더 짧음 (마지막 성공 4.2s vs 8.8s).
 - Redisson은 분산 락(tryLock wait + Redis 왕복) 비용이 단일 인스턴스·단일 DB 경합에서는 오버헤드로 나타날 수 있다.
 - 멀티 인스턴스(8080+8081) 에서는 Redisson의 장점(인스턴스 간 락)이 드러나므로, 단일 인스턴스 지연만으로 “항상 Redisson이 느리다”고 단정하지 않는다.
-- 핫스팟(AVAILABLE ≪ VU) 시나리오의 409 폴백·성공률 차이는 §5·§6.2를 참고.
+- 핫스팟(AVAILABLE이 VU보다 훨씬 적은) 시나리오의 409 폴백·성공률 차이는 5장과 6.2절을 참고.
 
 ---
 
